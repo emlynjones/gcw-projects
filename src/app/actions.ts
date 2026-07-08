@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { isStatus, isProjectType, isInvoiceKind } from "@/lib/status";
+import { isStageFor, isProjectType, isInvoiceKind, canMarkLost, LOST } from "@/lib/status";
+import { importOneXeroContact } from "@/app/xero-actions";
 
 async function requireUser() {
   const session = await auth();
@@ -17,6 +18,19 @@ const opt = (fd: FormData, key: string) => str(fd, key) || null;
 const num = (fd: FormData, key: string) => {
   const n = parseFloat(str(fd, key));
   return Number.isFinite(n) ? n : 0;
+};
+const optNum = (fd: FormData, key: string) => {
+  const s = str(fd, key);
+  if (!s) return null;
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+};
+// Accepts "2026-07" (month input) or "2026-07-08" (date input); month → 1st.
+const optDate = (fd: FormData, key: string) => {
+  const s = str(fd, key);
+  if (!s) return null;
+  const d = new Date(/^\d{4}-\d{2}$/.test(s) ? `${s}-01` : s);
+  return isNaN(d.getTime()) ? null : d;
 };
 
 /* ---------- Clients ---------- */
@@ -63,15 +77,18 @@ export async function deleteClient(id: string) {
 
 export async function createProject(formData: FormData) {
   await requireUser();
-  const status = str(formData, "status");
-  const type = str(formData, "type");
+  const type = isProjectType(str(formData, "type")) ? str(formData, "type") : "PROJECT";
+  const stage = str(formData, "stage");
   const project = await prisma.project.create({
     data: {
       title: str(formData, "title"),
       clientId: str(formData, "clientId"),
-      type: isProjectType(type) ? type : "WEBSITE",
+      type,
+      stage: isStageFor(type, stage) ? stage : "ENQUIRY",
       totalValue: num(formData, "totalValue"),
-      status: isStatus(status) ? status : "ENQUIRY",
+      startDate: optDate(formData, "startDate"),
+      targetDate: optDate(formData, "targetDate"),
+      hoursQuoted: optNum(formData, "hoursQuoted"),
       proposalUrl: opt(formData, "proposalUrl"),
     },
   });
@@ -82,17 +99,22 @@ export async function createProject(formData: FormData) {
 
 export async function updateProject(id: string, formData: FormData) {
   await requireUser();
-  const status = str(formData, "status");
-  const type = str(formData, "type");
+  const project = await prisma.project.findUniqueOrThrow({ where: { id } });
+  const type = isProjectType(str(formData, "type")) ? str(formData, "type") : project.type;
+  const stage = str(formData, "stage");
   await prisma.project.update({
     where: { id },
     data: {
       title: str(formData, "title"),
       clientId: str(formData, "clientId"),
-      type: isProjectType(type) ? type : undefined,
+      type,
       totalValue: num(formData, "totalValue"),
       depositPct: num(formData, "depositPct"),
-      status: isStatus(status) ? status : undefined,
+      stage: isStageFor(type, stage) ? stage : undefined,
+      startDate: optDate(formData, "startDate"),
+      targetDate: optDate(formData, "targetDate"),
+      hoursQuoted: optNum(formData, "hoursQuoted"),
+      hoursDone: optNum(formData, "hoursDone"),
       proposalUrl: opt(formData, "proposalUrl"),
     },
   });
@@ -101,9 +123,139 @@ export async function updateProject(id: string, formData: FormData) {
   revalidatePath("/");
 }
 
+/** Move a project to a specific stage on its track (advance buttons, stage select). */
+export async function setProjectStage(id: string, stage: string) {
+  await requireUser();
+  const project = await prisma.project.findUniqueOrThrow({ where: { id } });
+  if (!isStageFor(project.type, stage)) throw new Error(`Invalid stage ${stage} for ${project.type}`);
+  if (stage === LOST && !canMarkLost(project.stage)) throw new Error("Only enquiries can be marked lost");
+  await prisma.project.update({ where: { id }, data: { stage } });
+  revalidatePath(`/projects/${id}`);
+  revalidatePath("/projects");
+  revalidatePath("/");
+}
+
+/** Form wrapper for setProjectStage — used by the "move to stage" select. */
+export async function setProjectStageFromForm(id: string, formData: FormData) {
+  await setProjectStage(id, str(formData, "stage"));
+}
+
+export async function setProjectArchived(id: string, archived: boolean) {
+  await requireUser();
+  await prisma.project.update({ where: { id }, data: { archived } });
+  revalidatePath(`/projects/${id}`);
+  revalidatePath("/projects");
+  revalidatePath("/");
+}
+
+/** Quick inline "log hours" on ad-hoc jobs — updates hoursDone only. */
+export async function logHours(id: string, formData: FormData) {
+  await requireUser();
+  await prisma.project.update({ where: { id }, data: { hoursDone: optNum(formData, "hoursDone") } });
+  revalidatePath(`/projects/${id}`);
+  revalidatePath("/");
+}
+
 export async function deleteProject(id: string) {
   await requireUser();
   await prisma.project.delete({ where: { id } });
+  revalidatePath("/projects");
+  revalidatePath("/");
+  redirect("/projects");
+}
+
+/* ---------- Bulk add / edit ---------- */
+
+/** Resolve a bulk-form client value: local id, "xero:<contactId>" (import), or "" → null. */
+async function resolveClientId(value: string): Promise<string | null> {
+  if (!value) return null;
+  if (value.startsWith("xero:")) {
+    const client = await importOneXeroContact(value.slice(5));
+    return client.id;
+  }
+  return value;
+}
+
+/**
+ * Bulk-create projects. Rows are parallel arrays (title[], clientId[], start[],
+ * end[]); rows with an empty title are skipped. Projects without a client get
+ * a placeholder "— Unassigned —" client so the schema relation holds.
+ */
+export async function bulkCreateProjects(formData: FormData) {
+  await requireUser();
+  const titles = formData.getAll("title").map(String);
+  const clientIds = formData.getAll("clientId").map(String);
+  const starts = formData.getAll("start").map(String);
+  const ends = formData.getAll("end").map(String);
+
+  let unassignedId: string | null = null;
+  const getUnassigned = async () => {
+    if (unassignedId) return unassignedId;
+    const existing =
+      (await prisma.client.findFirst({ where: { name: "— Unassigned —" } })) ??
+      (await prisma.client.create({ data: { name: "— Unassigned —" } }));
+    unassignedId = existing.id;
+    return unassignedId;
+  };
+
+  const parseMonth = (s: string) => {
+    if (!s) return null;
+    const d = new Date(/^\d{4}-\d{2}$/.test(s) ? `${s}-01` : s);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  let created = 0;
+  for (let i = 0; i < titles.length; i++) {
+    const title = titles[i].trim();
+    if (!title) continue;
+    const clientId = (await resolveClientId(clientIds[i] ?? "")) ?? (await getUnassigned());
+    await prisma.project.create({
+      data: {
+        title,
+        clientId,
+        type: "PROJECT",
+        stage: "ONBOARDING", // bulk add is for in-flight work; stage editable after
+        startDate: parseMonth(starts[i] ?? ""),
+        targetDate: parseMonth(ends[i] ?? ""),
+      },
+    });
+    created++;
+  }
+  revalidatePath("/projects");
+  revalidatePath("/");
+  redirect(created ? "/projects" : "/projects/bulk");
+}
+
+/** Bulk-edit: one row per project id, fields suffixed __<id>. */
+export async function bulkUpdateProjects(formData: FormData) {
+  await requireUser();
+  const ids = formData.getAll("id").map(String);
+  for (const id of ids) {
+    const get = (k: string) => str(formData, `${k}__${id}`);
+    const title = get("title");
+    if (!title) continue;
+    const project = await prisma.project.findUnique({ where: { id } });
+    if (!project) continue;
+    const stage = get("stage");
+    const clientId = await resolveClientId(get("clientId"));
+    const parse = (s: string) => {
+      if (!s) return null;
+      const d = new Date(/^\d{4}-\d{2}$/.test(s) ? `${s}-01` : s);
+      return isNaN(d.getTime()) ? null : d;
+    };
+    await prisma.project.update({
+      where: { id },
+      data: {
+        title,
+        clientId: clientId ?? undefined,
+        stage: isStageFor(project.type, stage) ? stage : undefined,
+        startDate: parse(get("start")),
+        targetDate: parse(get("end")),
+        totalValue: num(formData, `value__${id}`),
+        archived: formData.get(`archived__${id}`) === "on",
+      },
+    });
+  }
   revalidatePath("/projects");
   revalidatePath("/");
   redirect("/projects");
@@ -162,7 +314,24 @@ export async function addNote(projectId: string, formData: FormData) {
   const body = str(formData, "body");
   if (!body) return;
   await prisma.note.create({
-    data: { projectId, author: user.name ?? user.email ?? "Unknown", body },
+    data: {
+      projectId,
+      author: user.name ?? user.email ?? "Unknown",
+      body,
+      timestamp: optDate(formData, "timestamp") ?? new Date(),
+    },
+  });
+  revalidatePath(`/projects/${projectId}`);
+}
+
+/** Edit a note's body and/or its display timestamp (backdating a call, etc.). */
+export async function updateNote(id: string, projectId: string, formData: FormData) {
+  await requireUser();
+  const body = str(formData, "body");
+  if (!body) return;
+  await prisma.note.update({
+    where: { id },
+    data: { body, timestamp: optDate(formData, "timestamp") ?? undefined },
   });
   revalidatePath(`/projects/${projectId}`);
 }

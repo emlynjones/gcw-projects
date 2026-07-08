@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { updateClient, deleteClient } from "@/app/actions";
-import { gbp, statusLabel, dateFmt } from "@/lib/status";
+import { gbp, stageLabel, dateFmt, projectTypeLabel } from "@/lib/status";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +58,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           <thead>
             <tr>
               <th>Project</th>
-              <th>Status</th>
+              <th>Stage</th>
               <th className="num">Value (ex-VAT)</th>
               <th className="num">Invoiced</th>
               <th>Updated</th>
@@ -71,9 +71,12 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                 <tr key={p.id}>
                   <td>
                     <Link href={`/projects/${p.id}`}>{p.title}</Link>
+                    {p.type === "ADHOC" && (
+                      <span className="badge badge-type ml-1">{projectTypeLabel(p.type)}</span>
+                    )}
                   </td>
                   <td>
-                    <span className={`badge badge-${p.status}`}>{statusLabel(p.status)}</span>
+                    <span className="badge badge-stage">{stageLabel(p.stage)}</span>
                   </td>
                   <td className="num">{gbp(p.totalValue)}</td>
                   <td className="num">{gbp(invoiced)}</td>

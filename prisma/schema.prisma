@@ -24,10 +24,15 @@ model Project {
   title       String
   clientId    String
   client      Client       @relation(fields: [clientId], references: [id])
-  type        String       @default("WEBSITE") // WEBSITE | ADHOC — drives invoicing UI
+  type        String       @default("PROJECT") // PROJECT | ADHOC — drives stage track + invoicing UI
+  stage       String       @default("ENQUIRY") // per-type stage track; lifecycle derived (see lib/status.ts)
+  archived    Boolean      @default(false) // orthogonal to stage — anything can be archived
   totalValue  Float        @default(0) // ex-VAT
-  depositPct  Float        @default(30) // deposit % of total (website projects)
-  status      String       @default("ENQUIRY")
+  depositPct  Float        @default(30) // deposit % of total (full projects)
+  startDate   DateTime? // month-level precision is fine — stored as 1st of month from bulk add
+  targetDate  DateTime? // expected finish
+  hoursQuoted Float? // ad-hoc: hours quoted
+  hoursDone   Float? // ad-hoc: hours actually done
   proposalUrl String?
   invoices    Invoice[]
   notes       Note[]
@@ -81,6 +86,7 @@ model Note {
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   author    String
   body      String
+  timestamp DateTime @default(now()) // display date — editable (backdate a call, etc.)
   createdAt DateTime @default(now())
 }
 

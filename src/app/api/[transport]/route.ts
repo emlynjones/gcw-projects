@@ -5,9 +5,19 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { STATUSES } from "@/lib/status";
+import {
+  PROJECT_TYPES,
+  ADHOC_STAGES,
+  PROJECT_STAGES,
+  LIFECYCLES,
+  LOST,
+  isStageFor,
+  lifecycleOf,
+} from "@/lib/status";
 
-const statusEnum = z.enum(STATUSES);
+const typeEnum = z.enum(PROJECT_TYPES);
+const lifecycleEnum = z.enum(LIFECYCLES);
+const stageEnum = z.enum([...new Set([...ADHOC_STAGES, ...PROJECT_STAGES, LOST])] as [string, ...string[]]);
 
 const json = (data: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
@@ -69,33 +79,49 @@ const handler = createMcpHandler(
     /* ---------- Projects ---------- */
     server.tool(
       "list_projects",
-      "List projects, optionally filtered by status. Includes client name and invoiced/left totals.",
+      "List projects, optionally filtered by stage, lifecycle (derived: ENQUIRY/ACTIVE/COMPLETE/LOST/ARCHIVED) or type (PROJECT/ADHOC). Includes client name and invoiced/left totals.",
       {
-        status: statusEnum.optional(),
+        stage: stageEnum.optional(),
+        lifecycle: lifecycleEnum.optional(),
+        type: typeEnum.optional(),
         includeArchived: z.boolean().optional().describe("Include archived projects (default false)"),
       },
-      async ({ status, includeArchived }) => {
+      async ({ stage, lifecycle, type, includeArchived }) => {
         const projects = await prisma.project.findMany({
-          where: status ? { status } : includeArchived ? {} : { status: { not: "ARCHIVED" } },
+          where: {
+            ...(stage ? { stage } : {}),
+            ...(type ? { type } : {}),
+            ...(includeArchived || lifecycle === "ARCHIVED" ? {} : { archived: false }),
+          },
           include: { client: { select: { name: true } }, invoices: true },
           orderBy: { updatedAt: "desc" },
         });
         return json(
-          projects.map((p) => {
-            const invoiced = p.invoices.reduce((s, i) => s + i.amount, 0);
-            return {
-              id: p.id,
-              title: p.title,
-              client: p.client.name,
-              clientId: p.clientId,
-              status: p.status,
-              totalValueExVat: p.totalValue,
-              invoiced,
-              leftToInvoice: p.totalValue - invoiced,
-              proposalUrl: p.proposalUrl,
-              updatedAt: p.updatedAt,
-            };
-          })
+          projects
+            .map((p) => ({ ...p, lifecycle: lifecycleOf(p) }))
+            .filter((p) => !lifecycle || p.lifecycle === lifecycle)
+            .map((p) => {
+              const invoiced = p.invoices.reduce((s, i) => s + i.amount, 0);
+              return {
+                id: p.id,
+                title: p.title,
+                client: p.client.name,
+                clientId: p.clientId,
+                type: p.type,
+                stage: p.stage,
+                lifecycle: p.lifecycle,
+                archived: p.archived,
+                startDate: p.startDate,
+                targetDate: p.targetDate,
+                hoursQuoted: p.hoursQuoted,
+                hoursDone: p.hoursDone,
+                totalValueExVat: p.totalValue,
+                invoiced,
+                leftToInvoice: p.totalValue - invoiced,
+                proposalUrl: p.proposalUrl,
+                updatedAt: p.updatedAt,
+              };
+            })
         );
       }
     );
@@ -110,7 +136,7 @@ const handler = createMcpHandler(
           include: {
             client: true,
             invoices: { orderBy: { date: "asc" } },
-            notes: { orderBy: { createdAt: "desc" } },
+            notes: { orderBy: { timestamp: "desc" } },
             attachments: true,
           },
         });
@@ -122,29 +148,66 @@ const handler = createMcpHandler(
 
     server.tool(
       "create_project",
-      "Create a project for a client. totalValue is ex-VAT.",
+      "Create a project for a client. totalValue is ex-VAT. Type PROJECT stages: ENQUIRY→QUOTED→ONBOARDING→…→LIVE; type ADHOC: ENQUIRY→QUOTED→DOING→DONE→INVOICED. LOST is a terminal branch from ENQUIRY/QUOTED.",
       {
         title: z.string().min(1),
         clientId: z.string(),
+        type: typeEnum.default("PROJECT"),
+        stage: stageEnum.default("ENQUIRY"),
         totalValue: z.number().nonnegative().default(0),
-        status: statusEnum.default("ENQUIRY"),
+        startDate: z.string().optional().describe("ISO date"),
+        targetDate: z.string().optional().describe("ISO date — expected finish"),
+        hoursQuoted: z.number().nonnegative().optional(),
         proposalUrl: z.string().optional(),
       },
-      async (args) => json(await prisma.project.create({ data: args }))
+      async ({ startDate, targetDate, ...args }) => {
+        if (!isStageFor(args.type, args.stage))
+          return json({ error: `Stage ${args.stage} is not valid for type ${args.type}` });
+        return json(
+          await prisma.project.create({
+            data: {
+              ...args,
+              startDate: startDate ? new Date(startDate) : undefined,
+              targetDate: targetDate ? new Date(targetDate) : undefined,
+            },
+          })
+        );
+      }
     );
 
     server.tool(
       "update_project",
-      "Update a project (title, client, value, status, proposal URL). Only supplied fields change.",
+      "Update a project (title, client, value, stage, dates, hours, archived, proposal URL). Only supplied fields change.",
       {
         id: z.string(),
         title: z.string().optional(),
         clientId: z.string().optional(),
         totalValue: z.number().nonnegative().optional(),
-        status: statusEnum.optional(),
+        stage: stageEnum.optional(),
+        archived: z.boolean().optional(),
+        startDate: z.string().nullable().optional().describe("ISO date, null clears"),
+        targetDate: z.string().nullable().optional().describe("ISO date, null clears"),
+        hoursQuoted: z.number().nonnegative().nullable().optional(),
+        hoursDone: z.number().nonnegative().nullable().optional(),
         proposalUrl: z.string().nullable().optional(),
       },
-      async ({ id, ...data }) => json(await prisma.project.update({ where: { id }, data }))
+      async ({ id, stage, startDate, targetDate, ...data }) => {
+        const project = await prisma.project.findUnique({ where: { id } });
+        if (!project) return json({ error: "Project not found" });
+        if (stage && !isStageFor(project.type, stage))
+          return json({ error: `Stage ${stage} is not valid for type ${project.type}` });
+        return json(
+          await prisma.project.update({
+            where: { id },
+            data: {
+              ...data,
+              ...(stage ? { stage } : {}),
+              ...(startDate !== undefined ? { startDate: startDate ? new Date(startDate) : null } : {}),
+              ...(targetDate !== undefined ? { targetDate: targetDate ? new Date(targetDate) : null } : {}),
+            },
+          })
+        );
+      }
     );
 
     server.tool(
@@ -208,13 +271,19 @@ const handler = createMcpHandler(
     /* ---------- Notes ---------- */
     server.tool(
       "add_note",
-      "Add a note to a project.",
+      "Add a note to a project. timestamp (ISO) is the display date — defaults to now, can be backdated.",
       {
         projectId: z.string(),
         body: z.string().min(1),
         author: z.string().default("MCP"),
+        timestamp: z.string().optional().describe("ISO datetime — defaults to now"),
       },
-      async (args) => json(await prisma.note.create({ data: args }))
+      async ({ timestamp, ...args }) =>
+        json(
+          await prisma.note.create({
+            data: { ...args, ...(timestamp ? { timestamp: new Date(timestamp) } : {}) },
+          })
+        )
     );
 
     server.tool(
@@ -262,27 +331,30 @@ const handler = createMcpHandler(
     /* ---------- Reporting ---------- */
     server.tool(
       "dashboard_summary",
-      "Pipeline value (Enquiry+Proposal Sent), left-to-invoice (Active+Invoiced), invoiced-unpaid total, and active project count.",
+      "Pipeline value (enquiry-phase), left-to-invoice (active work), invoiced-unpaid total, and active counts by type.",
       {},
       async () => {
-        const projects = await prisma.project.findMany({
-          where: { status: { not: "ARCHIVED" } },
-          include: { invoices: true },
-        });
+        const projects = (
+          await prisma.project.findMany({ where: { archived: false }, include: { invoices: true } })
+        ).map((p) => ({ ...p, lifecycle: lifecycleOf(p) }));
         const sum = (arr: number[]) => arr.reduce((a, b) => a + b, 0);
-        const pipelineValue = sum(
-          projects.filter((p) => ["ENQUIRY", "PROPOSAL_SENT"].includes(p.status)).map((p) => p.totalValue)
-        );
+        const pipelineValue = sum(projects.filter((p) => p.lifecycle === "ENQUIRY").map((p) => p.totalValue));
+        const activeProjects = projects.filter((p) => p.lifecycle === "ACTIVE");
         const leftToInvoice = sum(
-          projects
-            .filter((p) => ["ACTIVE", "INVOICED"].includes(p.status))
-            .map((p) => Math.max(0, p.totalValue - sum(p.invoices.map((i) => i.amount))))
+          activeProjects.map((p) => Math.max(0, p.totalValue - sum(p.invoices.map((i) => i.amount))))
         );
         const invoicedUnpaid = sum(
           projects.flatMap((p) => p.invoices).filter((i) => !i.paid).map((i) => i.amount)
         );
-        const activeCount = projects.filter((p) => p.status === "ACTIVE").length;
-        return json({ currency: "GBP", exVat: true, pipelineValue, leftToInvoice, invoicedUnpaid, activeCount });
+        return json({
+          currency: "GBP",
+          exVat: true,
+          pipelineValue,
+          leftToInvoice,
+          invoicedUnpaid,
+          activeProjectCount: activeProjects.filter((p) => p.type === "PROJECT").length,
+          activeAdhocCount: activeProjects.filter((p) => p.type === "ADHOC").length,
+        });
       }
     );
   },

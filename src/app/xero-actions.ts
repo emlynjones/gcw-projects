@@ -110,6 +110,73 @@ export async function linkClientToXero(clientId: string, formData: FormData) {
   revalidatePath(`/clients/${clientId}`);
 }
 
+/** Create a NEW local invoice row from an existing Xero invoice (the "Link invoice" modal). */
+export async function linkNewInvoiceFromXero(projectId: string, formData: FormData) {
+  await requireUser();
+  const xeroInvoiceId = String(formData.get("xeroInvoiceId") ?? "");
+  if (!xeroInvoiceId) return;
+  const kind = String(formData.get("kind") ?? "");
+  const [xi] = await getInvoicesByIds([xeroInvoiceId]);
+  if (!xi) throw new Error("Xero invoice not found");
+  await prisma.invoice.create({
+    data: {
+      projectId,
+      amount: xi.SubTotal,
+      reference: xi.InvoiceNumber ?? xi.Reference ?? xeroInvoiceId.slice(0, 8),
+      kind: isInvoiceKind(kind) ? kind : null,
+      date: parseXeroDate(xi.Date) ?? new Date(),
+      paid: xi.Status === "PAID",
+      xeroInvoiceId: xi.InvoiceID,
+      xeroNumber: xi.InvoiceNumber ?? null,
+      xeroStatus: xi.Status,
+      xeroSynced: true,
+    },
+  });
+  revalidatePath(`/projects/${projectId}`);
+  redirect(`/projects/${projectId}`);
+}
+
+/** Raise a DRAFT ad-hoc invoice in Xero, prefilled from the project (title, hours, amount). */
+export async function raiseAdhocInvoice(projectId: string) {
+  await requireUser();
+  const project = await prisma.project.findUniqueOrThrow({
+    where: { id: projectId },
+    include: { client: true },
+  });
+  if (project.totalValue <= 0) throw new Error("Set the project amount before invoicing.");
+
+  const hours = project.hoursDone ?? project.hoursQuoted;
+  const description = `${project.title}${hours ? ` (${hours} hrs)` : ""}`;
+  const contactId = await ensureXeroContactId(project);
+  const xi = await createDraftInvoice({
+    contactId,
+    reference: project.title,
+    lines: [{ description, quantity: 1, unitAmount: project.totalValue }],
+  });
+
+  await prisma.invoice.create({
+    data: {
+      projectId,
+      amount: xi.SubTotal,
+      reference: xi.InvoiceNumber || project.title,
+      kind: "ADHOC",
+      date: new Date(),
+      paid: false,
+      xeroInvoiceId: xi.InvoiceID,
+      xeroNumber: xi.InvoiceNumber ?? null,
+      xeroStatus: xi.Status,
+      xeroSynced: true,
+    },
+  });
+  // Invoicing an ad-hoc job at DONE is the last step — move it along automatically.
+  if (project.type === "ADHOC" && project.stage === "DONE") {
+    await prisma.project.update({ where: { id: projectId }, data: { stage: "INVOICED" } });
+  }
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/");
+  redirect(`/projects/${projectId}`);
+}
+
 /** Link a local invoice row to an existing Xero invoice and pull its state. */
 export async function linkInvoiceToXero(invoiceId: string, projectId: string, formData: FormData) {
   await requireUser();
@@ -203,6 +270,7 @@ export async function createXeroInvoice(projectId: string, formData: FormData) {
   });
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/");
+  redirect(`/projects/${projectId}`);
 }
 
 /** Raise a DRAFT deposit invoice in Xero: depositPct% of the project total, one line, tagged DEPOSIT. */
@@ -240,6 +308,7 @@ export async function raiseDepositInvoice(projectId: string) {
   });
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/");
+  redirect(`/projects/${projectId}`);
 }
 
 /* ---------- Services ---------- */

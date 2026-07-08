@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Client {
+  id            String    @id @default(cuid())
+  name          String
+  contactName   String?
+  email         String?
+  phone         String?
+  xeroContactId String? // Xero sync deferred — field reserved
+  projects      Project[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Project {
+  id          String       @id @default(cuid())
+  title       String
+  clientId    String
+  client      Client       @relation(fields: [clientId], references: [id])
+  type        String       @default("WEBSITE") // WEBSITE | ADHOC — drives invoicing UI
+  totalValue  Float        @default(0) // ex-VAT
+  depositPct  Float        @default(30) // deposit % of total (website projects)
+  status      String       @default("ENQUIRY")
+  proposalUrl String?
+  invoices    Invoice[]
+  notes       Note[]
+  attachments Attachment[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  amount        Float // ex-VAT
+  reference     String
+  kind          String?  // DEPOSIT | INTERIM | FINAL | null (untagged/other)
+  date          DateTime @default(now())
+  paid          Boolean  @default(false)
+  xeroInvoiceId String? // linked Xero invoice (InvoiceID)
+  xeroNumber    String? // Xero invoice number (INV-xxxx)
+  xeroStatus    String? // DRAFT | SUBMITTED | AUTHORISED | PAID | VOIDED
+  xeroSynced    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+}
+
+// Single-row table: the app-wide Xero org connection (GCW's own books)
+model XeroConnection {
+  id           String   @id @default("xero")
+  tenantId     String
+  tenantName   String
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  scope        String
+  updatedAt    DateTime @updatedAt
+}
+
+model Service {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  description String?
+  price       Float // ex-VAT
+  unit        String  @default("one-off") // one-off | month | year | hour | session | day | half-day
+  category    String
+  active      Boolean @default(true)
+  sortOrder   Int     @default(0)
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author    String
+  body      String
+  createdAt DateTime @default(now())
+}
+
+model Attachment {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  label     String
+  url       String // external link only in v1 (SharePoint etc.)
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  role         String   @default("staff") // admin | staff (identical permissions in v1)
+  provider     String // entra | credentials
+  passwordHash String?
+  createdAt    DateTime @default(now())
+}

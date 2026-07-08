@@ -1,0 +1,12 @@
+services:
+  gcw-projects:
+    build: .
+    container_name: gcw-projects
+    restart: unless-stopped
+    ports:
+      - "3010:3000"
+    env_file: .env
+    environment:
+      DATABASE_URL: "file:/data/gcw-projects.db"
+    volumes:
+      - /data-drive/docker/gcw-projects/data:/data

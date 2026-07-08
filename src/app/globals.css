@@ -1,0 +1,569 @@
+/* GCW brand — Gwe Cambrian Web design system */
+:root {
+  --gcw-navy: #13324c;
+  --gcw-orange: #f96c27;
+  --gcw-blue: #2770b5;
+  --gcw-yellow: #fedf49;
+  --gcw-white: #ffffff;
+
+  --bg: #f4f6f9;
+  --surface: var(--gcw-white);
+  --border: #dde4ec;
+  --text: var(--gcw-navy);
+  --muted: #5b6b7d;
+  --accent: var(--gcw-orange);
+  --accent-hover: #e05a18;
+  --link: var(--gcw-blue);
+  --danger: #b3382c;
+  --radius: 8px;
+
+  --font-heading: "Montserrat", sans-serif;
+  --font-body: "Quicksand", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* Top bar — navy with orange accents */
+.topbar {
+  background: var(--gcw-navy);
+  color: #fff;
+}
+.topbar-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  height: 58px;
+}
+.brand {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 17px;
+  color: #fff;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.brand span {
+  font-weight: 500;
+  color: var(--gcw-blue);
+}
+.brand:hover {
+  color: #fff;
+  text-decoration: none;
+}
+.topbar nav {
+  display: flex;
+  gap: 20px;
+}
+.topbar nav a {
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.8);
+  padding: 4px 0;
+}
+.topbar nav a:hover {
+  color: var(--gcw-orange);
+  text-decoration: none;
+}
+.topbar-user {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+}
+
+/* Headings — Montserrat */
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-heading);
+  color: var(--gcw-navy);
+}
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+h1 {
+  font-size: 26px;
+  font-weight: 600;
+  margin: 0;
+}
+h2 {
+  font-size: 15px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 14px;
+}
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+/* Stats */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.stat {
+  background: var(--gcw-navy);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  color: #fff;
+}
+.stat .label {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.7);
+}
+.stat .value {
+  font-family: var(--font-heading);
+  font-size: 26px;
+  font-weight: 700;
+  margin-top: 6px;
+  color: var(--gcw-orange);
+}
+.stat .muted {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+th,
+td {
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  vertical-align: middle;
+}
+th {
+  background: #eef2f7;
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+tr:last-child td {
+  border-bottom: none;
+}
+td.num,
+th.num {
+  text-align: right;
+}
+
+/* Status badges */
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.badge-ENQUIRY {
+  background: #e8edf3;
+  color: #4a5b6d;
+}
+.badge-PROPOSAL_SENT {
+  background: #e3edf8;
+  color: var(--gcw-blue);
+}
+.badge-ACTIVE {
+  background: #fde8dc;
+  color: #c14e12;
+}
+.badge-INVOICED {
+  background: #fdf6d8;
+  color: #8a6d00;
+}
+.badge-PAID {
+  background: #e5f4e3;
+  color: #2e6b28;
+}
+.badge-COMPLETE {
+  background: #e6ebf1;
+  color: var(--gcw-navy);
+}
+.badge-ARCHIVED {
+  background: #f0f0f0;
+  color: #8a8a8a;
+}
+.badge-match {
+  background: var(--gcw-yellow);
+  color: var(--gcw-navy);
+}
+.badge-type {
+  background: #ece7f6;
+  color: #5b3fa0;
+}
+.ml-1 {
+  margin-left: 8px;
+}
+
+/* Xero status badges */
+.badge-xero-DRAFT {
+  background: #e8edf3;
+  color: #4a5b6d;
+}
+.badge-xero-SUBMITTED,
+.badge-xero-AUTHORISED {
+  background: #e3edf8;
+  color: var(--gcw-blue);
+}
+.badge-xero-PAID {
+  background: #e5f4e3;
+  color: #2e6b28;
+}
+.badge-xero-VOIDED {
+  background: #f0f0f0;
+  color: #8a8a8a;
+}
+
+.paid-yes {
+  color: #2e6b28;
+  font-weight: 600;
+}
+.paid-no {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* Forms */
+form.stack {
+  display: grid;
+  gap: 12px;
+}
+.field {
+  display: grid;
+  gap: 4px;
+}
+.field label {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+input,
+select,
+textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  background: #fff;
+  color: var(--text);
+  width: 100%;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid rgba(249, 108, 39, 0.3);
+  border-color: var(--accent);
+}
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+.inline-form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.inline-form .field {
+  min-width: 120px;
+}
+
+/* Buttons — orange primary on navy/white */
+.btn {
+  display: inline-block;
+  padding: 8px 18px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn:hover {
+  background: var(--accent-hover);
+  color: #fff;
+  text-decoration: none;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-secondary {
+  background: #fff;
+  color: var(--gcw-blue);
+  border-color: var(--gcw-blue);
+}
+.btn-secondary:hover {
+  background: #eff5fb;
+  color: var(--gcw-blue);
+}
+.btn-danger {
+  background: #fff;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.btn-danger:hover {
+  background: #fbf0ef;
+  color: var(--danger);
+}
+.btn-ghost {
+  background: transparent;
+  color: inherit;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+.btn-ghost:hover {
+  background: rgba(19, 50, 76, 0.08);
+  color: inherit;
+}
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* Misc */
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 13px;
+}
+.mt {
+  margin-top: 20px;
+}
+code {
+  background: #eef2f7;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.filters a {
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.filters a.active {
+  background: var(--gcw-navy);
+  border-color: var(--gcw-navy);
+  color: #fff;
+}
+.filters a:hover {
+  text-decoration: none;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.filters a.active:hover {
+  color: #fff;
+}
+
+.note {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 0;
+}
+.note:last-child {
+  border-bottom: none;
+}
+.note-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.note-body {
+  white-space: pre-wrap;
+}
+
+/* Login */
+.login-wrap {
+  max-width: 380px;
+  margin: 60px auto;
+}
+.login-wrap .card {
+  padding: 28px;
+  border-top: 4px solid var(--gcw-orange);
+}
+.login-title {
+  text-align: center;
+  margin-bottom: 22px;
+}
+.login-title .brand-lg {
+  font-family: var(--font-heading);
+  font-size: 22px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--gcw-navy);
+}
+.login-title .brand-lg span {
+  color: var(--gcw-blue);
+}
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  margin: 18px 0;
+}
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.btn-block {
+  width: 100%;
+  text-align: center;
+}
+.error-msg {
+  background: #fbf0ef;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+.success-msg {
+  background: #e5f4e3;
+  border: 1px solid #2e6b28;
+  color: #2e6b28;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
+/* Xero contact search picker */
+.xero-search-results {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: #fff;
+}
+.xero-search-results li + li {
+  border-top: 1px solid var(--border);
+}
+.xero-search-results button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.xero-search-results button:hover:not(:disabled) {
+  background: var(--bg);
+}
+.xero-search-results button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.xero-search-results button.selected {
+  background: var(--bg);
+  font-weight: 600;
+}
+.xero-search-empty {
+  padding: 8px 12px;
+}
+.badge-xero-source {
+  background: #e3edf8;
+  color: var(--gcw-blue);
+}
+.client-picker {
+  max-width: 420px;
+}

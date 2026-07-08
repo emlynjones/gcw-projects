@@ -3,10 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { bulkCreateProjects, bulkUpdateProjects } from "@/app/actions";
 import { stagesFor, stageLabel, LOST, projectTypeLabel } from "@/lib/status";
 import { getConnection, getUnlinkedXeroContacts, type XeroContactLite } from "@/lib/xero";
+import BulkAddForm from "./BulkAddForm";
 
 export const dynamic = "force-dynamic";
 
-const ADD_ROWS = 10;
 const monthInput = (d: Date | null) => (d ? d.toISOString().slice(0, 7) : "");
 
 export default async function BulkPage() {
@@ -24,28 +24,6 @@ export default async function BulkPage() {
     }
   }
 
-  const clientSelect = (
-    <>
-      <option value="">— no client yet —</option>
-      <optgroup label="Clients">
-        {clients.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </optgroup>
-      {xeroContacts.length > 0 && (
-        <optgroup label="From Xero (imports on save)">
-          {xeroContacts.map((c) => (
-            <option key={c.contactId} value={`xero:${c.contactId}`}>
-              {c.name}
-            </option>
-          ))}
-        </optgroup>
-      )}
-    </>
-  );
-
   return (
     <>
       <div className="page-head">
@@ -59,45 +37,9 @@ export default async function BulkPage() {
         <h2>Add projects</h2>
         <p className="muted small">
           Fill in as many rows as you need — empty rows are skipped. Everything is optional except the name
-          and can be edited later. New projects start at Onboarding.
+          and can be edited later. Search the client field to filter local clients and Xero contacts.
         </p>
-        <form action={bulkCreateProjects}>
-          <table>
-            <thead>
-              <tr>
-                <th>Project name</th>
-                <th>Client</th>
-                <th style={{ width: 150 }}>Start</th>
-                <th style={{ width: 150 }}>Est. end</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Array.from({ length: ADD_ROWS }).map((_, i) => (
-                <tr key={i}>
-                  <td>
-                    <input name="title" placeholder={i === 0 ? "Project name…" : ""} />
-                  </td>
-                  <td>
-                    <select name="clientId" defaultValue="">
-                      {clientSelect}
-                    </select>
-                  </td>
-                  <td>
-                    <input name="start" type="month" />
-                  </td>
-                  <td>
-                    <input name="end" type="month" />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="mt">
-            <button type="submit" className="btn">
-              Create projects
-            </button>
-          </div>
-        </form>
+        <BulkAddForm initialClients={clients} xeroContacts={xeroContacts} action={bulkCreateProjects} />
       </div>
 
       <div className="card">

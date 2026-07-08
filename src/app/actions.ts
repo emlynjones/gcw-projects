@@ -187,6 +187,7 @@ export async function bulkCreateProjects(formData: FormData) {
   const clientIds = formData.getAll("clientId").map(String);
   const starts = formData.getAll("start").map(String);
   const ends = formData.getAll("end").map(String);
+  const stages = formData.getAll("stage").map(String);
 
   let unassignedId: string | null = null;
   const getUnassigned = async () => {
@@ -209,12 +210,13 @@ export async function bulkCreateProjects(formData: FormData) {
     const title = titles[i].trim();
     if (!title) continue;
     const clientId = (await resolveClientId(clientIds[i] ?? "")) ?? (await getUnassigned());
+    const stage = stages[i] ?? "";
     await prisma.project.create({
       data: {
         title,
         clientId,
         type: "PROJECT",
-        stage: "ONBOARDING", // bulk add is for in-flight work; stage editable after
+        stage: isStageFor("PROJECT", stage) ? stage : "ONBOARDING",
         startDate: parseMonth(starts[i] ?? ""),
         targetDate: parseMonth(ends[i] ?? ""),
       },

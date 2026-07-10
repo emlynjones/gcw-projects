@@ -514,6 +514,55 @@ code {
   margin-bottom: 14px;
 }
 
+/* Reports + print */
+.print-only {
+  display: none;
+}
+.report-title h1 {
+  margin: 0;
+}
+.activity-block {
+  margin-bottom: 16px;
+}
+.activity-block h3 {
+  margin: 0 0 6px;
+}
+.report-note {
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.report-note:last-child {
+  border-bottom: none;
+}
+
+@media print {
+  .topbar,
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block;
+  }
+  .container {
+    max-width: none;
+    padding: 0;
+  }
+  .card {
+    border: 1px solid #ccc;
+    break-inside: avoid;
+    box-shadow: none;
+  }
+  .stat {
+    background: #13324c !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
 /* Stage stepper */
 .stepper {
   display: flex;

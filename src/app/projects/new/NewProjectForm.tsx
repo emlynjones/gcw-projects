@@ -123,9 +123,17 @@ export default function NewProjectForm({
                 </div>
               </div>
               <div className="field">
+                <label htmlFor="description">Description (optional)</label>
+                <textarea id="description" name="description" rows={2} placeholder="Short scope / overview…" />
+              </div>
+              <div className="field">
                 <label htmlFor="proposalUrl">Proposal URL</label>
                 <input id="proposalUrl" name="proposalUrl" type="url" placeholder="https://…" />
               </div>
+              <p className="muted small" style={{ margin: 0 }}>
+                Standard hosting &amp; a domain will be added automatically — edit or remove them on the project
+                page.
+              </p>
             </>
           )}
 

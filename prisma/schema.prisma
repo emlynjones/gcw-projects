@@ -31,14 +31,67 @@ model Project {
   depositPct  Float        @default(30) // deposit % of total (full projects)
   startDate   DateTime? // month-level precision is fine — stored as 1st of month from bulk add
   targetDate  DateTime? // expected finish
+  completedDate DateTime? // actual completion — auto-set when a project goes LIVE; used for duration reporting
   hoursQuoted Float? // ad-hoc: hours quoted
   hoursDone   Float? // ad-hoc: hours actually done
+  description String? // free-text overview / scope
+  briefText   String? // tender / brief as free text (or use a BRIEF file)
+  siteStructure String? // plain-text proposed site structure / sitemap
+  structureApproved Boolean @default(false) // client has signed off the structure
   proposalUrl String?
   invoices    Invoice[]
   notes       Note[]
   attachments Attachment[]
+  devSites    DevSite[]
+  files       ProjectFile[]
+  services    ProjectService[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+}
+
+// Repeatable dev/staging URLs for a project; one may be marked approved.
+model DevSite {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  url       String
+  label     String?
+  approved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// Uploaded documents stored on the data volume (proposal PDF, brief, etc.).
+model ProjectFile {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind      String   // PROPOSAL | BRIEF | OTHER
+  filename  String   // original filename shown to the user
+  path      String   // path relative to the uploads dir
+  mime      String?
+  size      Int?
+  createdAt DateTime @default(now())
+}
+
+// Services attached to a project — the basis for the final invoice.
+model ProjectService {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  serviceId String? // optional link back to the price-list Service
+  name      String
+  unit      String   @default("one-off")
+  price     Float    @default(0) // ex-VAT unit price
+  quantity  Float    @default(1)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+// App-wide key/value settings. Secret values (AI API keys) are stored encrypted.
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }
 
 model Invoice {

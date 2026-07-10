@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getConnection, xeroConfigured } from "@/lib/xero";
 import { disconnectXero } from "@/app/xero-actions";
+import { updateAiSettings, clearAiKey } from "@/app/ai-actions";
+import { getAiStatus, DEFAULT_AI_MODEL } from "@/lib/settings";
 import { prisma } from "@/lib/prisma";
 import { dateFmt } from "@/lib/status";
 
@@ -17,6 +19,7 @@ export default async function SettingsPage({
   const linkedClients = await prisma.client.count({ where: { xeroContactId: { not: null } } });
   const linkedInvoices = await prisma.invoice.count({ where: { xeroInvoiceId: { not: null } } });
   const serviceCount = await prisma.service.count({ where: { active: true } });
+  const ai = await getAiStatus();
 
   return (
     <>
@@ -87,6 +90,61 @@ export default async function SettingsPage({
         <Link href="/settings/services" className="btn btn-secondary">
           Manage services
         </Link>
+      </div>
+
+      <div className="card">
+        <h2>AI</h2>
+        <p className="muted small">
+          Add an OpenAI or Claude API key to enable AI features (e.g. drafting a site structure from a
+          brief). The key is stored encrypted and never shown again.
+        </p>
+        {ai.configured ? (
+          <p>
+            <span className="badge badge-life-COMPLETE">Key set</span>{" "}
+            <span className="muted small">
+              Provider: {ai.provider === "openai" ? "OpenAI" : "Claude (Anthropic)"} · Model:{" "}
+              <code>{ai.model}</code>
+            </span>
+          </p>
+        ) : (
+          <p className="muted small">No API key set — AI features are disabled.</p>
+        )}
+        <form action={updateAiSettings} className="stack" style={{ maxWidth: 520 }}>
+          <div className="row">
+            <div className="field">
+              <label htmlFor="provider">Provider</label>
+              <select id="provider" name="provider" defaultValue={ai.provider ?? "anthropic"}>
+                <option value="anthropic">Claude (Anthropic)</option>
+                <option value="openai">OpenAI</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="model">Model</label>
+              <input
+                id="model"
+                name="model"
+                defaultValue={ai.model ?? DEFAULT_AI_MODEL.anthropic}
+                placeholder="claude-sonnet-5 / gpt-4o"
+              />
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="apiKey">API key {ai.configured && "(leave blank to keep current)"}</label>
+            <input id="apiKey" name="apiKey" type="password" autoComplete="off" placeholder="sk-… / sk-ant-…" />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="submit" className="btn">
+              Save AI settings
+            </button>
+          </div>
+        </form>
+        {ai.configured && (
+          <form action={clearAiKey} className="mt">
+            <button type="submit" className="btn btn-danger btn-sm">
+              Remove API key
+            </button>
+          </form>
+        )}
       </div>
 
       <div className="card">

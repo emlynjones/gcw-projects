@@ -16,7 +16,16 @@ export default async function NewProjectPage({
     prisma.client.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     getConnection(),
   ]);
-  const xeroContacts = conn ? await getUnlinkedXeroContacts() : [];
+  // Never let a Xero hiccup (e.g. expired token) block project creation — the
+  // local client list is enough to create a project.
+  let xeroContacts: Awaited<ReturnType<typeof getUnlinkedXeroContacts>> = [];
+  if (conn) {
+    try {
+      xeroContacts = await getUnlinkedXeroContacts();
+    } catch {
+      xeroContacts = [];
+    }
+  }
 
   return (
     <>

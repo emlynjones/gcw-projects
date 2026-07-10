@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { isStageFor, isProjectType, isInvoiceKind, canMarkLost, LOST } from "@/lib/status";
 import { importOneXeroContact } from "@/app/xero-actions";
+import { saveUpload, deleteUpload } from "@/lib/files";
 
 async function requireUser() {
   const session = await auth();
@@ -86,12 +87,17 @@ export async function createProject(formData: FormData) {
       type,
       stage: isStageFor(type, stage) ? stage : "ENQUIRY",
       totalValue: num(formData, "totalValue"),
+      description: opt(formData, "description"),
       startDate: optDate(formData, "startDate"),
       targetDate: optDate(formData, "targetDate"),
       hoursQuoted: optNum(formData, "hoursQuoted"),
       proposalUrl: opt(formData, "proposalUrl"),
     },
   });
+  // Full projects get standard hosting + domain by default; easy to remove later.
+  if (type === "PROJECT" && str(formData, "skipStandardServices") !== "on") {
+    await addStandardServicesFor(project.id);
+  }
   revalidatePath("/projects");
   revalidatePath("/");
   redirect(`/projects/${project.id}`);
@@ -113,8 +119,10 @@ export async function updateProject(id: string, formData: FormData) {
       stage: isStageFor(type, stage) ? stage : undefined,
       startDate: optDate(formData, "startDate"),
       targetDate: optDate(formData, "targetDate"),
+      completedDate: optDate(formData, "completedDate"),
       hoursQuoted: optNum(formData, "hoursQuoted"),
       hoursDone: optNum(formData, "hoursDone"),
+      description: opt(formData, "description"),
       proposalUrl: opt(formData, "proposalUrl"),
     },
   });
@@ -123,13 +131,34 @@ export async function updateProject(id: string, formData: FormData) {
   revalidatePath("/");
 }
 
+/** Save the brief (free text) and/or site structure text; optional structure approval. */
+export async function updateProjectDocs(id: string, formData: FormData) {
+  await requireUser();
+  await prisma.project.update({
+    where: { id },
+    data: {
+      briefText: opt(formData, "briefText"),
+      siteStructure: opt(formData, "siteStructure"),
+    },
+  });
+  revalidatePath(`/projects/${id}`);
+}
+
+export async function setStructureApproved(id: string, approved: boolean) {
+  await requireUser();
+  await prisma.project.update({ where: { id }, data: { structureApproved: approved } });
+  revalidatePath(`/projects/${id}`);
+}
+
 /** Move a project to a specific stage on its track (advance buttons, stage select). */
 export async function setProjectStage(id: string, stage: string) {
   await requireUser();
   const project = await prisma.project.findUniqueOrThrow({ where: { id } });
   if (!isStageFor(project.type, stage)) throw new Error(`Invalid stage ${stage} for ${project.type}`);
   if (stage === LOST && !canMarkLost(project.stage)) throw new Error("Only enquiries can be marked lost");
-  await prisma.project.update({ where: { id }, data: { stage } });
+  // Reaching LIVE records the actual completion date (for duration reporting) unless already set.
+  const completedDate = stage === "LIVE" && !project.completedDate ? new Date() : undefined;
+  await prisma.project.update({ where: { id }, data: { stage, completedDate } });
   revalidatePath(`/projects/${id}`);
   revalidatePath("/projects");
   revalidatePath("/");
@@ -261,6 +290,146 @@ export async function bulkUpdateProjects(formData: FormData) {
   revalidatePath("/projects");
   revalidatePath("/");
   redirect("/projects");
+}
+
+/* ---------- Dev sites ---------- */
+
+export async function addDevSite(projectId: string, formData: FormData) {
+  await requireUser();
+  const url = str(formData, "url");
+  if (!url) return;
+  await prisma.devSite.create({
+    data: { projectId, url, label: opt(formData, "label"), approved: false },
+  });
+  revalidatePath(`/projects/${projectId}`);
+}
+
+/** Mark one dev site as the approved one (clears the flag on the project's others). */
+export async function approveDevSite(id: string, projectId: string) {
+  await requireUser();
+  await prisma.devSite.updateMany({ where: { projectId }, data: { approved: false } });
+  await prisma.devSite.update({ where: { id }, data: { approved: true } });
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function deleteDevSite(id: string, projectId: string) {
+  await requireUser();
+  await prisma.devSite.delete({ where: { id } });
+  revalidatePath(`/projects/${projectId}`);
+}
+
+/* ---------- Files (proposal / brief / other) ---------- */
+
+export async function uploadProjectFile(projectId: string, formData: FormData) {
+  await requireUser();
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return;
+  const kindRaw = str(formData, "kind");
+  const kind = ["PROPOSAL", "BRIEF", "OTHER"].includes(kindRaw) ? kindRaw : "OTHER";
+  const saved = await saveUpload(projectId, file);
+  await prisma.projectFile.create({
+    data: {
+      projectId,
+      kind,
+      filename: saved.filename,
+      path: saved.path,
+      mime: saved.mime,
+      size: saved.size,
+    },
+  });
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function deleteProjectFile(id: string, projectId: string) {
+  await requireUser();
+  const file = await prisma.projectFile.findUnique({ where: { id } });
+  if (file) {
+    await deleteUpload(file.path);
+    await prisma.projectFile.delete({ where: { id } });
+  }
+  revalidatePath(`/projects/${projectId}`);
+}
+
+/* ---------- Project services (basis for the final invoice) ---------- */
+
+/** Add hosting + domain from the price list (by name match) or sensible defaults. */
+export async function addStandardServicesFor(projectId: string) {
+  const wanted = [
+    { match: /hosting/i, fallback: { name: "Standard hosting", unit: "year", price: 120 } },
+    { match: /domain/i, fallback: { name: "Domain name", unit: "year", price: 15 } },
+  ];
+  const services = await prisma.service.findMany({ where: { active: true } });
+  let order = 0;
+  for (const w of wanted) {
+    const svc = services.find((s) => w.match.test(s.name));
+    await prisma.projectService.create({
+      data: {
+        projectId,
+        serviceId: svc?.id ?? null,
+        name: svc?.name ?? w.fallback.name,
+        unit: svc?.unit ?? w.fallback.unit,
+        price: svc?.price ?? w.fallback.price,
+        quantity: 1,
+        sortOrder: order++,
+      },
+    });
+  }
+}
+
+/** Add a service line to a project — from the price list (serviceId) or a custom entry. */
+export async function addProjectService(projectId: string, formData: FormData) {
+  await requireUser();
+  const serviceId = opt(formData, "serviceId");
+  const count = await prisma.projectService.count({ where: { projectId } });
+  if (serviceId) {
+    const svc = await prisma.service.findUnique({ where: { id: serviceId } });
+    if (!svc) return;
+    await prisma.projectService.create({
+      data: {
+        projectId,
+        serviceId: svc.id,
+        name: svc.name,
+        unit: svc.unit,
+        price: svc.price,
+        quantity: optNum(formData, "quantity") ?? 1,
+        sortOrder: count,
+      },
+    });
+  } else {
+    const name = str(formData, "name");
+    if (!name) return;
+    await prisma.projectService.create({
+      data: {
+        projectId,
+        name,
+        unit: str(formData, "unit") || "one-off",
+        price: num(formData, "price"),
+        quantity: optNum(formData, "quantity") ?? 1,
+        sortOrder: count,
+      },
+    });
+  }
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function updateProjectService(id: string, projectId: string, formData: FormData) {
+  await requireUser();
+  await prisma.projectService.update({
+    where: { id },
+    data: {
+      name: str(formData, "name"),
+      unit: str(formData, "unit") || "one-off",
+      price: num(formData, "price"),
+      quantity: optNum(formData, "quantity") ?? 1,
+    },
+  });
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function deleteProjectService(id: string, projectId: string) {
+  await requireUser();
+  await prisma.projectService.delete({ where: { id } });
+  revalidatePath(`/projects/${projectId}`);
 }
 
 /* ---------- Invoices ---------- */

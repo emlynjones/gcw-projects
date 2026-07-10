@@ -273,6 +273,44 @@ export async function createXeroInvoice(projectId: string, formData: FormData) {
   redirect(`/projects/${projectId}`);
 }
 
+/** Raise a DRAFT invoice in Xero from the project's linked services (the "invoice at the end" flow). */
+export async function raiseInvoiceFromServices(projectId: string) {
+  await requireUser();
+  const project = await prisma.project.findUniqueOrThrow({
+    where: { id: projectId },
+    include: { client: true, services: { orderBy: { sortOrder: "asc" } } },
+  });
+  const lines: InvoiceLine[] = project.services
+    .filter((s) => s.quantity > 0)
+    .map((s) => ({
+      description: s.unit && s.unit !== "one-off" ? `${s.name} (per ${s.unit})` : s.name,
+      quantity: s.quantity,
+      unitAmount: s.price,
+    }));
+  if (!lines.length) throw new Error("No services on this project to invoice.");
+
+  const contactId = await ensureXeroContactId(project);
+  const xi = await createDraftInvoice({ contactId, reference: project.title, lines });
+
+  await prisma.invoice.create({
+    data: {
+      projectId,
+      amount: xi.SubTotal,
+      reference: xi.InvoiceNumber || project.title,
+      kind: "FINAL",
+      date: new Date(),
+      paid: false,
+      xeroInvoiceId: xi.InvoiceID,
+      xeroNumber: xi.InvoiceNumber ?? null,
+      xeroStatus: xi.Status,
+      xeroSynced: true,
+    },
+  });
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/");
+  redirect(`/projects/${projectId}`);
+}
+
 /** Raise a DRAFT deposit invoice in Xero: depositPct% of the project total, one line, tagged DEPOSIT. */
 export async function raiseDepositInvoice(projectId: string) {
   await requireUser();

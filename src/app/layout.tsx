@@ -31,6 +31,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <Link href="/">Dashboard</Link>
                 <Link href="/projects">Projects</Link>
                 <Link href="/clients">Clients</Link>
+                <Link href="/reports">Reports</Link>
                 <Link href="/settings">Settings</Link>
               </nav>
               <div className="topbar-user">

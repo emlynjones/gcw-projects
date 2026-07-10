@@ -3,11 +3,21 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import {
   updateProject,
+  updateProjectDocs,
+  setStructureApproved,
   deleteProject,
   setProjectStage,
   setProjectStageFromForm,
   setProjectArchived,
   logHours,
+  addDevSite,
+  approveDevSite,
+  deleteDevSite,
+  uploadProjectFile,
+  deleteProjectFile,
+  addProjectService,
+  updateProjectService,
+  deleteProjectService,
   addInvoice,
   toggleInvoicePaid,
   deleteInvoice,
@@ -18,6 +28,8 @@ import {
   addAttachment,
   deleteAttachment,
 } from "@/app/actions";
+import { generateSiteStructure } from "@/app/ai-actions";
+import { getAiStatus } from "@/lib/settings";
 import {
   stagesFor,
   stageLabel,
@@ -41,6 +53,7 @@ import {
   createXeroInvoice,
   raiseDepositInvoice,
   raiseAdhocInvoice,
+  raiseInvoiceFromServices,
   linkNewInvoiceFromXero,
   syncProjectInvoices,
 } from "@/app/xero-actions";
@@ -67,11 +80,24 @@ export default async function ProjectPage({
       invoices: { orderBy: { date: "asc" } },
       notes: { orderBy: { timestamp: "desc" } },
       attachments: { orderBy: { createdAt: "asc" } },
+      devSites: { orderBy: { createdAt: "asc" } },
+      files: { orderBy: { createdAt: "asc" } },
+      services: { orderBy: { sortOrder: "asc" } },
     },
   });
   if (!project) notFound();
 
   const isAdhoc = project.type === "ADHOC";
+  const ai = await getAiStatus();
+  const priceList = await prisma.service.findMany({
+    where: { active: true },
+    orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
+    select: { id: true, name: true, price: true, unit: true, category: true },
+  });
+  const servicesTotal = project.services.reduce((s, x) => s + x.price * x.quantity, 0);
+  const proposalFiles = project.files.filter((f) => f.kind === "PROPOSAL");
+  const briefFiles = project.files.filter((f) => f.kind === "BRIEF");
+  const otherFiles = project.files.filter((f) => f.kind === "OTHER");
   const lifecycle = lifecycleOf(project);
   const action = stageAction(project.type, project.stage);
   const next = nextStage(project.type, project.stage);
@@ -262,9 +288,15 @@ export default async function ProjectPage({
             </div>
           </div>
         )}
+        {!isAdhoc && (
+          <div className="fact">
+            <div className="label">Completed</div>
+            <div className="value">{project.completedDate ? dateFmt(project.completedDate) : "—"}</div>
+          </div>
+        )}
         {project.proposalUrl && (
           <div className="fact">
-            <div className="label">Proposal</div>
+            <div className="label">Proposal link</div>
             <div className="value">
               <a href={project.proposalUrl} target="_blank">
                 Open ↗
@@ -273,6 +305,303 @@ export default async function ProjectPage({
           </div>
         )}
       </div>
+
+      {/* Description */}
+      {project.description && (
+        <div className="card">
+          <h2>Overview</h2>
+          <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{project.description}</p>
+        </div>
+      )}
+
+      {!isAdhoc && (
+        <>
+          {/* Brief / tender */}
+          <div className="card">
+            <h2>Brief / tender</h2>
+            <form action={updateProjectDocs.bind(null, project.id)} className="stack">
+              <textarea
+                name="briefText"
+                rows={5}
+                defaultValue={project.briefText ?? ""}
+                placeholder="Paste the brief / tender text here…"
+              />
+              {/* siteStructure is round-tripped so this form doesn't wipe it */}
+              <input type="hidden" name="siteStructure" value={project.siteStructure ?? ""} />
+              <div>
+                <button type="submit" className="btn btn-sm">
+                  Save brief
+                </button>
+              </div>
+            </form>
+            {briefFiles.length > 0 && (
+              <ul className="mt">
+                {briefFiles.map((f) => (
+                  <li key={f.id}>
+                    <a href={`/api/files/${f.id}`} target="_blank">
+                      {f.filename}
+                    </a>{" "}
+                    <form action={deleteProjectFile.bind(null, f.id, project.id)} style={{ display: "inline" }}>
+                      <button type="submit" className="btn btn-ghost btn-sm" style={{ color: "var(--muted)" }}>
+                        ✕
+                      </button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form action={uploadProjectFile.bind(null, project.id)} className="inline-form mt">
+              <input type="hidden" name="kind" value="BRIEF" />
+              <input type="file" name="file" required />
+              <button type="submit" className="btn btn-secondary btn-sm">
+                Upload brief document
+              </button>
+            </form>
+          </div>
+
+          {/* Site structure */}
+          <div className="card">
+            <div className="page-head" style={{ marginBottom: 12 }}>
+              <h2 style={{ margin: 0 }}>Site structure</h2>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {project.structureApproved ? (
+                  <>
+                    <span className="badge badge-life-COMPLETE">Approved ✓</span>
+                    <form action={setStructureApproved.bind(null, project.id, false)}>
+                      <button type="submit" className="btn btn-ghost btn-sm">
+                        Un-approve
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  <form action={setStructureApproved.bind(null, project.id, true)}>
+                    <button type="submit" className="btn btn-sm">
+                      Mark approved
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
+            <form action={updateProjectDocs.bind(null, project.id)} className="stack">
+              <textarea
+                name="siteStructure"
+                rows={8}
+                defaultValue={project.siteStructure ?? ""}
+                placeholder={"Home\n  About\n  Services\n    Service A\n  Contact"}
+                style={{ fontFamily: "monospace" }}
+              />
+              <input type="hidden" name="briefText" value={project.briefText ?? ""} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="submit" className="btn btn-sm">
+                  Save structure
+                </button>
+                {ai.configured && (
+                  <form action={generateSiteStructure.bind(null, project.id)}>
+                    <button type="submit" className="btn btn-secondary btn-sm" title="Draft from the brief/description">
+                      ✨ Draft with AI
+                    </button>
+                  </form>
+                )}
+              </div>
+            </form>
+            {!ai.configured && (
+              <p className="muted small mt">
+                Tip: add an AI key in <Link href="/settings">Settings</Link> to draft a structure from the brief.
+              </p>
+            )}
+          </div>
+
+          {/* Dev sites */}
+          <div className="card">
+            <h2>Dev / staging sites</h2>
+            {project.devSites.length === 0 && <p className="muted small">No dev sites yet.</p>}
+            {project.devSites.length > 0 && (
+              <table className="compact">
+                <tbody>
+                  {project.devSites.map((d) => (
+                    <tr key={d.id}>
+                      <td>
+                        <a href={d.url} target="_blank">
+                          {d.url}
+                        </a>{" "}
+                        {d.label && <span className="muted small">· {d.label}</span>}
+                      </td>
+                      <td style={{ width: 160 }}>
+                        {d.approved ? (
+                          <span className="badge badge-life-COMPLETE">Approved</span>
+                        ) : (
+                          <form action={approveDevSite.bind(null, d.id, project.id)}>
+                            <button type="submit" className="btn btn-ghost btn-sm">
+                              Set approved
+                            </button>
+                          </form>
+                        )}
+                      </td>
+                      <td style={{ width: 30 }}>
+                        <form action={deleteDevSite.bind(null, d.id, project.id)}>
+                          <button type="submit" className="btn btn-ghost btn-sm" style={{ color: "var(--muted)" }}>
+                            ✕
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <form action={addDevSite.bind(null, project.id)} className="inline-form mt">
+              <div className="field" style={{ flex: 2 }}>
+                <label htmlFor="devurl">URL</label>
+                <input id="devurl" name="url" type="url" required placeholder="https://staging.example.com" />
+              </div>
+              <div className="field" style={{ flex: 1 }}>
+                <label htmlFor="devlabel">Label (optional)</label>
+                <input id="devlabel" name="label" placeholder="WP staging" />
+              </div>
+              <button type="submit" className="btn">
+                Add dev site
+              </button>
+            </form>
+          </div>
+
+          {/* Services on this project */}
+          <div className="card">
+            <div className="page-head" style={{ marginBottom: 12 }}>
+              <h2 style={{ margin: 0 }}>Services (for final invoice)</h2>
+              <strong>{gbp(servicesTotal)}</strong>
+            </div>
+            {project.services.length === 0 && <p className="muted small">No services attached.</p>}
+            {project.services.length > 0 && (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Service</th>
+                    <th style={{ width: 110 }}>Unit</th>
+                    <th style={{ width: 110 }}>Price £</th>
+                    <th style={{ width: 90 }}>Qty</th>
+                    <th className="num" style={{ width: 100 }}>
+                      Total
+                    </th>
+                    <th style={{ width: 90 }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {project.services.map((s) => (
+                    <tr key={s.id}>
+                      <td colSpan={4} style={{ padding: 0 }}>
+                        <form
+                          action={updateProjectService.bind(null, s.id, project.id)}
+                          className="inline-form"
+                          style={{ gap: 4, padding: "6px 14px", flexWrap: "nowrap" }}
+                        >
+                          <input name="name" defaultValue={s.name} style={{ flex: 2 }} />
+                          <input name="unit" defaultValue={s.unit} style={{ width: 90 }} />
+                          <input name="price" type="number" step="0.01" min="0" defaultValue={s.price} style={{ width: 90 }} />
+                          <input name="quantity" type="number" step="0.25" min="0" defaultValue={s.quantity} style={{ width: 70 }} />
+                          <button type="submit" className="btn btn-secondary btn-sm">
+                            Save
+                          </button>
+                        </form>
+                      </td>
+                      <td className="num">{gbp(s.price * s.quantity)}</td>
+                      <td>
+                        <form action={deleteProjectService.bind(null, s.id, project.id)}>
+                          <button type="submit" className="btn btn-ghost btn-sm" style={{ color: "var(--muted)" }}>
+                            Remove
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <div className="mt" style={{ display: "grid", gap: 12 }}>
+              <form action={addProjectService.bind(null, project.id)} className="inline-form">
+                <div className="field" style={{ flex: 2 }}>
+                  <label htmlFor="svcId">Add from price list</label>
+                  <select id="svcId" name="serviceId" defaultValue="">
+                    <option value="">— choose —</option>
+                    {priceList.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} — £{s.price}
+                        {s.unit !== "one-off" ? `/${s.unit}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="svcQty">Qty</label>
+                  <input id="svcQty" name="quantity" type="number" step="0.25" min="0" defaultValue="1" style={{ width: 80 }} />
+                </div>
+                <button type="submit" className="btn btn-secondary">
+                  Add
+                </button>
+              </form>
+              <form action={addProjectService.bind(null, project.id)} className="inline-form">
+                <div className="field" style={{ flex: 2 }}>
+                  <label htmlFor="csName">Or custom line</label>
+                  <input id="csName" name="name" placeholder="Custom service" />
+                </div>
+                <div className="field">
+                  <label htmlFor="csUnit">Unit</label>
+                  <input id="csUnit" name="unit" defaultValue="one-off" style={{ width: 100 }} />
+                </div>
+                <div className="field">
+                  <label htmlFor="csPrice">Price £</label>
+                  <input id="csPrice" name="price" type="number" step="0.01" min="0" defaultValue="0" style={{ width: 100 }} />
+                </div>
+                <button type="submit" className="btn btn-secondary">
+                  Add
+                </button>
+              </form>
+            </div>
+            {xeroConn && project.services.length > 0 && (
+              <form action={raiseInvoiceFromServices.bind(null, project.id)} className="mt">
+                <button type="submit" className="btn">
+                  Raise invoice from these services (DRAFT in Xero)
+                </button>
+              </form>
+            )}
+          </div>
+
+          {/* Proposal & documents */}
+          <div className="card">
+            <h2>Proposal &amp; documents</h2>
+            {proposalFiles.length === 0 && otherFiles.length === 0 && (
+              <p className="muted small">No documents uploaded.</p>
+            )}
+            <ul>
+              {[...proposalFiles, ...otherFiles].map((f) => (
+                <li key={f.id}>
+                  <a href={`/api/files/${f.id}`} target="_blank">
+                    {f.filename}
+                  </a>{" "}
+                  <span className="muted small">({f.kind.toLowerCase()})</span>{" "}
+                  <form action={deleteProjectFile.bind(null, f.id, project.id)} style={{ display: "inline" }}>
+                    <button type="submit" className="btn btn-ghost btn-sm" style={{ color: "var(--muted)" }}>
+                      ✕
+                    </button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+            <form action={uploadProjectFile.bind(null, project.id)} className="inline-form mt">
+              <div className="field">
+                <label htmlFor="fileKind">Type</label>
+                <select id="fileKind" name="kind" defaultValue="PROPOSAL">
+                  <option value="PROPOSAL">Proposal (PDF)</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+              <input type="file" name="file" required />
+              <button type="submit" className="btn btn-secondary">
+                Upload
+              </button>
+            </form>
+          </div>
+        </>
+      )}
 
       {/* Invoices */}
       <div className="card">
@@ -326,8 +655,8 @@ export default async function ProjectPage({
                         </option>
                       ))}
                     </select>
-                    <button type="submit" className="btn btn-ghost btn-sm" title="Set role">
-                      ✓
+                    <button type="submit" className="btn btn-secondary btn-sm" title="Save role">
+                      Save
                     </button>
                   </form>
                 </td>
@@ -540,6 +869,17 @@ export default async function ProjectPage({
               <label htmlFor="targetDate">Expected finish</label>
               <input id="targetDate" name="targetDate" type="date" defaultValue={dateInput(project.targetDate)} />
             </div>
+            {!isAdhoc && (
+              <div className="field">
+                <label htmlFor="completedDate">Actual completion</label>
+                <input
+                  id="completedDate"
+                  name="completedDate"
+                  type="date"
+                  defaultValue={dateInput(project.completedDate)}
+                />
+              </div>
+            )}
             {isAdhoc && (
               <>
                 <div className="field">
@@ -566,6 +906,16 @@ export default async function ProjectPage({
                 </div>
               </>
             )}
+          </div>
+          <div className="field">
+            <label htmlFor="description">Description / overview</label>
+            <textarea
+              id="description"
+              name="description"
+              rows={3}
+              defaultValue={project.description ?? ""}
+              placeholder="Short scope / overview…"
+            />
           </div>
           <div className="field">
             <label htmlFor="proposalUrl">Proposal URL</label>

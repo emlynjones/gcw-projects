@@ -175,12 +175,18 @@ export function contactPhone(c: XeroContact): string | null {
 
 /* ---------- Endpoints ---------- */
 
-/** All customer contacts (paged). */
+/**
+ * All active contacts (paged). We deliberately do NOT filter on IsCustomer:
+ * Xero only sets IsCustomer=true once a contact has a sales transaction, so a
+ * brand-new contact would otherwise never appear in the picker. Fetching all
+ * ACTIVE contacts shows newly-added clients immediately.
+ */
 export async function getCustomers(): Promise<XeroContact[]> {
+  const where = encodeURIComponent('ContactStatus=="ACTIVE"');
   const all: XeroContact[] = [];
-  for (let page = 1; page <= 10; page++) {
+  for (let page = 1; page <= 20; page++) {
     const data = await api<{ Contacts: XeroContact[] }>(
-      `/Contacts?where=IsCustomer%3D%3Dtrue&page=${page}&order=Name`
+      `/Contacts?where=${where}&page=${page}&order=Name`
     );
     all.push(...(data.Contacts ?? []));
     if (!data.Contacts || data.Contacts.length < 100) break;

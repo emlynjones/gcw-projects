@@ -7,3 +7,10 @@ node_modules/
 next-env.d.ts
 *.tsbuildinfo
 .claude/settings.local.json
+
+# e2e (Playwright) — generated artefacts, never committed
+e2e/.test-data/
+e2e/.auth/
+e2e/playwright-report/
+e2e/test-results/
+test-results/

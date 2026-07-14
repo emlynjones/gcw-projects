@@ -2,6 +2,8 @@
 FROM node:22-alpine AS deps
 RUN apk add --no-cache openssl
 WORKDIR /app
+# e2e-only dev dependency; never download browsers during the image build.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
 RUN npm ci

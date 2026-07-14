@@ -96,7 +96,21 @@ export default function NewProjectForm({
                 </select>
               </div>
             </div>
-          ) : (
+          ) : null}
+
+          {isAdhoc && (
+            <div className="field">
+              <label htmlFor="description">Details / tasks (optional)</label>
+              <textarea
+                id="description"
+                name="description"
+                rows={4}
+                placeholder={"List the tasks, e.g.\n- Fix contact form\n- Update opening hours\n- Add new gallery"}
+              />
+            </div>
+          )}
+
+          {!isAdhoc && (
             <>
               <div className="row">
                 <div className="field">

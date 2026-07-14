@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import {
   updateProject,
   updateProjectDocs,
+  saveDescription,
   setStructureApproved,
   deleteProject,
   setProjectStage,
@@ -28,7 +29,7 @@ import {
   addAttachment,
   deleteAttachment,
 } from "@/app/actions";
-import { generateSiteStructure } from "@/app/ai-actions";
+import { generateSiteStructure, generateNextSteps } from "@/app/ai-actions";
 import { getAiStatus } from "@/lib/settings";
 import {
   stagesFor,
@@ -306,11 +307,59 @@ export default async function ProjectPage({
         )}
       </div>
 
-      {/* Description */}
-      {project.description && (
+      {/* Ad-hoc: editable details / tasks */}
+      {isAdhoc && (
+        <div className="card">
+          <h2>Details / tasks</h2>
+          <form action={saveDescription.bind(null, project.id)} className="stack">
+            <textarea
+              name="description"
+              rows={5}
+              defaultValue={project.description ?? ""}
+              placeholder={"List the tasks, e.g.\n- Fix contact form\n- Update opening hours"}
+            />
+            <div>
+              <button type="submit" className="btn btn-sm">
+                Save details
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Full project: read-only overview */}
+      {!isAdhoc && project.description && (
         <div className="card">
           <h2>Overview</h2>
           <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{project.description}</p>
+        </div>
+      )}
+
+      {/* AI next steps */}
+      {(ai.configured || project.aiNextSteps) && (
+        <div className="card next-action">
+          <div className="page-head" style={{ marginBottom: 10 }}>
+            <h2 style={{ margin: 0 }}>AI next steps</h2>
+            {ai.configured && (
+              <form action={generateNextSteps.bind(null, project.id)}>
+                <button type="submit" className="btn btn-secondary btn-sm">
+                  {project.aiNextSteps ? "✨ Refresh" : "✨ Generate"}
+                </button>
+              </form>
+            )}
+          </div>
+          {project.aiNextSteps ? (
+            <>
+              <div style={{ whiteSpace: "pre-wrap" }}>{project.aiNextSteps}</div>
+              {project.aiNextStepsAt && (
+                <p className="muted small mt">Generated {dateTimeFmt(project.aiNextStepsAt)}</p>
+              )}
+            </>
+          ) : (
+            <p className="muted small">
+              Not generated yet — click Generate for AI-suggested next actions from the stage and recent notes.
+            </p>
+          )}
         </div>
       )}
 

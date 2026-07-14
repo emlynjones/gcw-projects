@@ -131,6 +131,13 @@ export async function updateProject(id: string, formData: FormData) {
   revalidatePath("/");
 }
 
+/** Lightweight save of just the description/tasks (used by the ad-hoc details card). */
+export async function saveDescription(id: string, formData: FormData) {
+  await requireUser();
+  await prisma.project.update({ where: { id }, data: { description: opt(formData, "description") } });
+  revalidatePath(`/projects/${id}`);
+}
+
 /** Save the brief (free text) and/or site structure text; optional structure approval. */
 export async function updateProjectDocs(id: string, formData: FormData) {
   await requireUser();

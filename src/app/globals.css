@@ -530,9 +530,69 @@ code {
 .report-note {
   padding: 3px 0;
   border-bottom: 1px dashed var(--border);
+  font-size: 13px;
+  line-height: 1.35;
 }
 .report-note:last-child {
   border-bottom: none;
+}
+
+/* Per-project report block */
+.report-project {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.report-project-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.report-project-title {
+  font-family: var(--font-heading);
+  font-weight: 600;
+}
+.report-project-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 720px) {
+  .report-project-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.report-subhead {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.next-step-hint {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gcw-navy);
+  margin-bottom: 10px;
+}
+.ai-next {
+  background: #fbf3ee;
+  border-left: 3px solid var(--gcw-orange);
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.tasks-preview {
+  white-space: pre-wrap;
+  max-height: 3.4em;
+  overflow: hidden;
+  margin-top: 2px;
 }
 
 @media print {

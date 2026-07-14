@@ -38,6 +38,8 @@ model Project {
   briefText   String? // tender / brief as free text (or use a BRIEF file)
   siteStructure String? // plain-text proposed site structure / sitemap
   structureApproved Boolean @default(false) // client has signed off the structure
+  aiNextSteps String? // AI-generated "what to do next" (cached; refreshed on demand)
+  aiNextStepsAt DateTime? // when aiNextSteps was last generated
   proposalUrl String?
   invoices    Invoice[]
   notes       Note[]

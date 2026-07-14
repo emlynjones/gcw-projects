@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { saveAiSettings, deleteSetting, AI_API_KEY_ENC, AI_PROVIDER, AI_MODEL } from "@/lib/settings";
 import { aiComplete } from "@/lib/ai";
+import { stageLabel, stageAction, lifecycleOf, dateFmt } from "@/lib/status";
 
 async function requireUser() {
   const session = await auth();
@@ -60,4 +61,66 @@ export async function generateSiteStructure(projectId: string) {
 
   await prisma.project.update({ where: { id: projectId }, data: { siteStructure: draft } });
   revalidatePath(`/projects/${projectId}`);
+}
+
+/** Build the prompt context + generate a concise "next steps" note for one project. */
+async function nextStepsFor(projectId: string): Promise<void> {
+  const project = await prisma.project.findUniqueOrThrow({
+    where: { id: projectId },
+    include: { client: true, notes: { orderBy: { timestamp: "desc" }, take: 5 } },
+  });
+  const hint = stageAction(project.type, project.stage).hint;
+  const notes = project.notes.length
+    ? project.notes.map((n) => `- (${dateFmt(n.timestamp)}) ${n.body}`).join("\n")
+    : "No notes yet.";
+  const context = [
+    `Client: ${project.client.name}`,
+    `Project: ${project.title}`,
+    `Type: ${project.type === "ADHOC" ? "Ad-hoc job" : "Website project"}`,
+    `Current stage: ${stageLabel(project.stage)}`,
+    `Standard next step for this stage: ${hint}`,
+    project.description ? `Details:\n${project.description}` : "",
+    `Recent notes (newest first):\n${notes}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const system =
+    "You are a project manager at a small web agency. Given a project's stage and recent notes, list the " +
+    "2–4 concrete next actions to move it forward. Be specific and reference the notes where relevant. " +
+    "Output a short plain bullet list only — no preamble, no headings.";
+  const steps = await aiComplete(system, context, 500);
+
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { aiNextSteps: steps, aiNextStepsAt: new Date() },
+  });
+}
+
+/** Generate/refresh the AI next-steps for a single project. */
+export async function generateNextSteps(projectId: string) {
+  await requireUser();
+  await nextStepsFor(projectId);
+  revalidatePath("/reports");
+  revalidatePath(`/projects/${projectId}`);
+}
+
+/**
+ * Generate AI next-steps for all active projects (used by the report). Runs
+ * with small concurrency to stay within rate limits; skips failures so one bad
+ * call doesn't abort the batch.
+ */
+export async function generateAllNextSteps() {
+  await requireUser();
+  const projects = await prisma.project.findMany({ where: { archived: false } });
+  const active = projects.filter((p) => {
+    const lc = lifecycleOf(p);
+    return lc === "ACTIVE" || lc === "ENQUIRY";
+  });
+
+  const BATCH = 3;
+  for (let i = 0; i < active.length; i += BATCH) {
+    await Promise.allSettled(active.slice(i, i + BATCH).map((p) => nextStepsFor(p.id)));
+  }
+  revalidatePath("/reports");
 }

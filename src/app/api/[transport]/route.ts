@@ -1,10 +1,12 @@
 /**
  * MCP server — exposed at /api/mcp (streamable HTTP).
- * Auth: Authorization: Bearer <MCP_API_KEY>
+ * Auth: Authorization: Bearer <MCP_API_KEY> (Claude Code) or an OAuth access token
+ * issued via /oauth/authorize + /api/oauth/token (claude.ai connector).
  */
-import { createMcpHandler } from "mcp-handler";
+import { createMcpHandler, withMcpAuth } from "mcp-handler";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { hashToken } from "@/lib/oauth";
 import {
   PROJECT_TYPES,
   ADHOC_STAGES,
@@ -362,20 +364,23 @@ const handler = createMcpHandler(
   { basePath: "/api" }
 );
 
-function authed(req: Request): boolean {
-  const header = req.headers.get("authorization") ?? "";
-  const key = process.env.MCP_API_KEY;
-  return !!key && header === `Bearer ${key}`;
+async function verifyToken(_req: Request, bearerToken?: string) {
+  if (!bearerToken) return undefined;
+
+  const staticKey = process.env.MCP_API_KEY;
+  if (staticKey && bearerToken === staticKey) {
+    return { token: bearerToken, clientId: "static-key", scopes: [] };
+  }
+
+  const stored = await prisma.oAuthToken.findUnique({ where: { accessTokenHash: hashToken(bearerToken) } });
+  if (!stored || stored.revoked || stored.accessExpiresAt < new Date()) return undefined;
+  return { token: bearerToken, clientId: stored.clientId, scopes: [] };
 }
 
-const withAuth = (req: Request) => {
-  if (!authed(req)) {
-    return new Response(JSON.stringify({ error: "Unauthorised — Bearer API key required" }), {
-      status: 401,
-      headers: { "content-type": "application/json" },
-    });
-  }
-  return handler(req);
-};
+const withAuth = withMcpAuth(handler, verifyToken, {
+  required: true,
+  resourceMetadataPath: "/.well-known/oauth-protected-resource",
+  resourceUrl: process.env.AUTH_URL ? `${process.env.AUTH_URL.replace(/\/$/, "")}/api/mcp` : undefined,
+});
 
 export { withAuth as GET, withAuth as POST, withAuth as DELETE };

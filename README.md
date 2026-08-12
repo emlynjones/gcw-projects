@@ -58,7 +58,7 @@ SQLite lives in the `/data-drive/docker/gcw-projects/data` volume — include it
 ## MCP server
 
 Endpoint: `https://projects.cambrianweb.dev/api/mcp` (streamable HTTP)
-Auth: `Authorization: Bearer <MCP_API_KEY>`
+Auth: `Authorization: Bearer <MCP_API_KEY>`, or an OAuth access token (see below).
 
 Claude Code:
 
@@ -66,6 +66,13 @@ Claude Code:
 claude mcp add gcw-projects --transport http https://projects.cambrianweb.dev/api/mcp \
   --header "Authorization: Bearer <MCP_API_KEY>"
 ```
+
+claude.ai (remote connector): Settings → Connectors → Add custom connector → paste
+`https://projects.cambrianweb.dev/api/mcp`. claude.ai dynamically registers itself as an
+OAuth client (RFC 7591) and redirects to `/oauth/authorize` — log in with your usual
+account and click Approve. No manual client id/secret entry needed. The OAuth
+authorization/token/registration endpoints live under `/api/oauth/*` and
+`/.well-known/oauth-*` (see `src/app/api/oauth/`).
 
 Tools: `list_clients`, `create_client`, `update_client`, `delete_client`, `list_projects`, `get_project`, `create_project`, `update_project`, `delete_project`, `add_invoice`, `update_invoice`, `delete_invoice`, `add_note`, `delete_note`, `add_attachment`, `delete_attachment`, `list_services`, `dashboard_summary`.
 

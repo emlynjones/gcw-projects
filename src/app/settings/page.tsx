@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getConnection, xeroConfigured } from "@/lib/xero";
 import { disconnectXero } from "@/app/xero-actions";
 import { updateAiSettings, clearAiKey } from "@/app/ai-actions";
+import { importBackupAction } from "@/app/settings/backup-actions";
 import { getAiStatus, DEFAULT_AI_MODEL } from "@/lib/settings";
 import { prisma } from "@/lib/prisma";
 import { dateFmt } from "@/lib/status";
@@ -11,9 +12,19 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ xeroConnected?: string; xeroError?: string }>;
+  searchParams: Promise<{
+    xeroConnected?: string;
+    xeroError?: string;
+    importOk?: string;
+    importError?: string;
+    created?: string;
+    updated?: string;
+    skipped?: string;
+    warnings?: string;
+  }>;
 }) {
-  const { xeroConnected, xeroError } = await searchParams;
+  const { xeroConnected, xeroError, importOk, importError, created, updated, skipped, warnings } =
+    await searchParams;
   const conn = await getConnection();
   const configured = xeroConfigured();
   const linkedClients = await prisma.client.count({ where: { xeroContactId: { not: null } } });
@@ -31,6 +42,37 @@ export default async function SettingsPage({
       {xeroError === "state" && <div className="error-msg">Xero connection failed (state mismatch) — try again.</div>}
       {xeroError === "token" && <div className="error-msg">Xero connection failed at token exchange — check client ID/secret and redirect URI.</div>}
       {xeroError === "notconfigured" && <div className="error-msg">Set XERO_CLIENT_ID and XERO_CLIENT_SECRET in the environment first.</div>}
+      {importOk && (
+        <div className="success-msg">
+          Backup imported: {created} created, {updated} updated, {skipped} skipped.
+          {warnings && <div className="small mt">{warnings}</div>}
+        </div>
+      )}
+      {importError === "nofile" && <div className="error-msg">Choose a backup file first.</div>}
+      {importError === "badjson" && <div className="error-msg">That file isn&apos;t valid JSON.</div>}
+
+      <div className="card">
+        <h2>Backup &amp; restore</h2>
+        <p className="muted small">
+          Backs up clients, projects, invoices, notes, attachments and the service price list.
+          Doesn&apos;t include login accounts, the Xero connection, AI settings, or uploaded files
+          (proposals/briefs) — back those up separately.
+        </p>
+        <a href="/api/backup/export" className="btn">
+          Download backup
+        </a>
+
+        <p className="muted small mt">
+          Restore from a backup file. Matches existing records by ID and updates them; anything new is
+          created. Existing data with matching IDs will be overwritten.
+        </p>
+        <form action={importBackupAction} className="row" style={{ alignItems: "center" }}>
+          <input type="file" name="backupFile" accept="application/json,.json" required />
+          <button type="submit" className="btn btn-secondary">
+            Import backup
+          </button>
+        </form>
+      </div>
 
       <div className="card">
         <h2>Xero</h2>
@@ -150,7 +192,9 @@ export default async function SettingsPage({
       <div className="card">
         <h2>MCP</h2>
         <p className="muted small">
-          Endpoint: <code>/api/mcp</code> · Auth: <code>Authorization: Bearer &lt;MCP_API_KEY&gt;</code>
+          Endpoint: <code>/api/mcp</code> · Auth: <code>Authorization: Bearer &lt;MCP_API_KEY&gt;</code> (Claude
+          Code), or OAuth (claude.ai connector — add the endpoint URL and approve at{" "}
+          <code>/oauth/authorize</code>).
         </p>
       </div>
     </>

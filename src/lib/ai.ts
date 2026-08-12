@@ -35,7 +35,9 @@ async function openai(cfg: AiConfig, system: string, user: string, maxTokens: nu
     },
     body: JSON.stringify({
       model: cfg.model,
-      max_tokens: maxTokens,
+      // Current OpenAI chat models (incl. reasoning models) require
+      // max_completion_tokens — max_tokens is rejected with a 400.
+      max_completion_tokens: maxTokens,
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },

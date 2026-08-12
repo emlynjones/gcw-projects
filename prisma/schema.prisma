@@ -163,3 +163,38 @@ model User {
   passwordHash String?
   createdAt    DateTime @default(now())
 }
+
+// Dynamically registered OAuth clients (RFC 7591) — e.g. claude.ai self-registers on first connect.
+model OAuthClient {
+  id               String   @id @default(cuid())
+  clientId         String   @unique
+  clientSecretHash String? // null => public client (PKCE only)
+  clientName       String?
+  redirectUris     String // JSON-encoded string[]
+  createdAt        DateTime @default(now())
+}
+
+// Short-lived authorization codes for the MCP OAuth flow — consumed once by /api/oauth/token.
+model OAuthCode {
+  code                String   @id
+  clientId            String
+  redirectUri         String
+  codeChallenge       String
+  codeChallengeMethod String   @default("S256")
+  userId              String
+  expiresAt           DateTime
+  createdAt           DateTime @default(now())
+}
+
+// Issued access/refresh tokens for the MCP OAuth flow — one row per grant, rotated in place on refresh.
+model OAuthToken {
+  id               String   @id @default(cuid())
+  clientId         String
+  userId           String
+  accessTokenHash  String   @unique
+  refreshTokenHash String?  @unique
+  accessExpiresAt  DateTime
+  revoked          Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}

@@ -33,6 +33,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <div className="nav-group">
                   <Link href="/projects">Work</Link>
                   <div className="nav-menu">
+                    <Link href="/work">My Work</Link>
+                    <Link href="/work?view=all">All Work</Link>
+                    <Link href="/work?view=planner">Weekly Planner</Link>
+                    <Link href="/work?view=kanban">Kanban</Link>
                     <Link href="/projects?type=PROJECT">Projects</Link>
                     <Link href="/projects?type=ADHOC">Ad-hoc</Link>
                   </div>

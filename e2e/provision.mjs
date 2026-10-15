@@ -1,5 +1,5 @@
 import { execSync } from "child_process";
-import { existsSync, rmSync, mkdirSync } from "fs";
+import { existsSync, rmSync, mkdirSync, openSync, closeSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -18,12 +18,19 @@ if (!url || !url.startsWith("file:")) {
   process.exit(1);
 }
 const dbFile = url.replace(/^file:/, "");
+const expected = path.join(__dirname, ".test-data", "e2e.db");
+if (path.resolve(dbFile) !== expected) {
+  throw new Error("Refusing to reset a database outside the dedicated e2e fixture path.");
+}
 
 console.log("[e2e] provisioning test DB at", dbFile);
 for (const f of [dbFile, `${dbFile}-journal`, `${dbFile}-wal`, `${dbFile}-shm`]) {
   if (existsSync(f)) rmSync(f);
 }
 mkdirSync(path.dirname(dbFile), { recursive: true });
+// Initialise the file explicitly: some Prisma/SQLite engine builds report an
+// opaque schema error when db push receives a nonexistent SQLite file.
+closeSync(openSync(dbFile, "wx"));
 
 execSync("npx prisma db push --skip-generate", { cwd: ROOT, stdio: "inherit", env: process.env });
 

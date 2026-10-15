@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ProjectTasks from "@/app/work/ProjectTasks";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { xeroInvoiceUrl } from "@/lib/xero-links";
@@ -215,6 +216,8 @@ export default async function ProjectPage({
       )}
 
       <InvoiceCta project={project} xeroConnected={!!xeroConn} />
+
+      <ProjectTasks projectId={project.id} />
 
       {/* Next action */}
       <div className="card next-action">

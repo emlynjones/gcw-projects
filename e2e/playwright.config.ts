@@ -58,6 +58,12 @@ export default defineConfig({
       AUTH_MICROSOFT_ENTRA_ID_SECRET: "e2e",
       AUTH_MICROSOFT_ENTRA_ID_ISSUER: "https://login.microsoftonline.com/common/v2.0",
       ALLOWED_EMAIL_DOMAIN: "",
+      GCW_O365_CLIENT_ID: "e2e",
+      GCW_O365_CLIENT_SECRET: "e2e",
+      GCW_O365_TENANT_ID: "common",
+      GCW_ADMIN_ALLOWED: "",
+      XERO_CLIENT_ID: "",
+      XERO_CLIENT_SECRET: "",
     },
   },
 });

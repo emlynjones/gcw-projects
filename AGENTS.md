@@ -51,6 +51,22 @@ Owns `Project`, `ProjectService`, `Invoice`, `Note`, `Attachment`, `DevSite`, an
   second accounting ledger.
 - Project completion must not silently create ongoing billing commitments.
 
+### Work management
+
+`src/modules/work` owns `Task`, `TaskDependency` and `StaffWeekCapacity`.
+Tasks reference existing projects (including ADHOC) and local staff users.
+Task progress must never change project stages, fees, invoices or recurring
+contracts. Dependencies are restricted to one project, must be acyclic, and
+must be complete before a dependent task is marked done. Reopening a prerequisite
+requires reopening its completed dependents first. Updates use a version check.
+
+Dates are date-only ISO strings; weeks start on Monday in the London business
+calendar. Capacity is explicitly entered per person/week (unset is unknown,
+zero means unavailable). Full estimated effort counts against the planned week,
+including completed tasks; it is not time tracking or daily scheduling.
+Authentication belongs to the server adapters; all work mutations use the shared
+application operations, which validate parent and assignee relationships.
+
 ### Catalogue
 
 Owns `Service` and product/service defaults such as descriptions, prices,

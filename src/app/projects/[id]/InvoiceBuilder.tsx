@@ -1,6 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import {
+  recurringDescription,
+  periodFromStart,
+  invoiceDate,
+} from "@/lib/invoice-descriptions";
 
 type Service = {
   id: string;
@@ -8,20 +13,54 @@ type Service = {
   price: number;
   unit: string;
   category: string;
+  xeroItemCode: string | null;
 };
 
-type Line = { description: string; quantity: number; unitAmount: number };
+/** A cached Xero product, for the per-line picker. */
+export type BuilderItem = { code: string; name: string };
+
+/**
+ * Which recurring kind a price-list entry represents, if any.
+ *
+ * Used only to decide whether a line is worth pre-filling with a domain and a
+ * term. Read off the name because the price list has no kind of its own.
+ */
+function kindOfService(name: string): "DOMAIN" | "HOSTING" | "O365" | "CAREPLAN" | null {
+  if (/care plan|gofal/i.test(name)) return "CAREPLAN";
+  if (/domain|parth/i.test(name)) return "DOMAIN";
+  if (/hosting|gwe-?letya/i.test(name)) return "HOSTING";
+  if (/365|licence|license/i.test(name)) return "O365";
+  return null;
+}
+
+/**
+ * `itemCode` decides which Xero account the line lands in and stops Xero
+ * rewriting the description when someone edits the item there, so it has to
+ * survive the trip from the price list to the form payload. It was missing from
+ * this type, which silently dropped every code the price list carried.
+ */
+type Line = {
+  description: string;
+  quantity: number;
+  unitAmount: number;
+  itemCode: string | null;
+};
 
 type KindOption = { value: string; label: string };
 
 export default function InvoiceBuilder({
   services,
+  items = [],
+  domains = [],
   defaultReference,
   action,
   kindOptions,
   defaultKind = "",
 }: {
   services: Service[];
+  items?: BuilderItem[];
+  /** The client's sites — used to name the domain on a hosting or domain line. */
+  domains?: string[];
   defaultReference: string;
   action: (formData: FormData) => Promise<void>;
   kindOptions?: KindOption[];
@@ -36,8 +75,22 @@ export default function InvoiceBuilder({
   const addService = (id: string) => {
     const svc = services.find((s) => s.id === id);
     if (!svc) return;
-    const suffix = svc.unit !== "one-off" ? ` (per ${svc.unit})` : "";
-    setLines([...lines, { description: svc.name + suffix, quantity: 1, unitAmount: svc.price }]);
+    const kind = kindOfService(svc.name);
+    // A renewal line is worth writing out in full — "Hosting account for x.co.uk
+    // from … to …" is what the client recognises, and what the matcher reads
+    // back when reconciling next year. Only one site can be named automatically;
+    // with several, the domain is left for the user rather than guessed.
+    const domain = domains.length === 1 ? domains[0] : null;
+    const term = svc.unit === "month" ? 1 : 12;
+    const description =
+      kind && domain
+        ? recurringDescription(kind, domain, periodFromStart(new Date(), term))
+        : svc.name + (svc.unit !== "one-off" ? ` (per ${svc.unit})` : "");
+
+    setLines([
+      ...lines,
+      { description, quantity: 1, unitAmount: svc.price, itemCode: svc.xeroItemCode },
+    ]);
   };
 
   const update = (i: number, patch: Partial<Line>) =>
@@ -87,7 +140,9 @@ export default function InvoiceBuilder({
         <button
           type="button"
           className="btn btn-secondary"
-          onClick={() => setLines([...lines, { description: "", quantity: 1, unitAmount: 0 }])}
+          onClick={() =>
+            setLines([...lines, { description: "", quantity: 1, unitAmount: 0, itemCode: null }])
+          }
         >
           + Custom line
         </button>
@@ -100,6 +155,7 @@ export default function InvoiceBuilder({
               <th>Description</th>
               <th style={{ width: 80 }}>Qty</th>
               <th style={{ width: 120 }}>Unit £ (ex-VAT)</th>
+              <th style={{ width: 170 }}>Bills as</th>
               <th className="num" style={{ width: 110 }}>
                 Line total
               </th>
@@ -133,6 +189,23 @@ export default function InvoiceBuilder({
                     value={l.unitAmount}
                     onChange={(e) => update(i, { unitAmount: parseFloat(e.target.value) || 0 })}
                   />
+                </td>
+                <td>
+                  {items.length ? (
+                    <select
+                      value={l.itemCode ?? ""}
+                      onChange={(e) => update(i, { itemCode: e.target.value || null })}
+                    >
+                      <option value="">— none —</option>
+                      {items.map((it) => (
+                        <option key={it.code} value={it.code}>
+                          {it.code} · {it.name.slice(0, 28)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="muted small">no products synced</span>
+                  )}
                 </td>
                 <td className="num">£{(l.quantity * l.unitAmount).toFixed(2)}</td>
                 <td>

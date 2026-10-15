@@ -17,18 +17,9 @@ npm run dev
 
 For local dev set `AUTH_URL=http://localhost:3000`. Admin credentials login works without any Azure setup.
 
-## Azure AD (Entra ID) setup — staff SSO
+## Microsoft Entra ID setup — staff SSO
 
-1. [portal.azure.com](https://portal.azure.com) → Microsoft Entra ID → **App registrations** → **New registration**
-2. Name: `GCW Projects`. Supported account types: **Accounts in this organizational directory only** (single tenant).
-3. Redirect URI (Web): `https://projects.cambrianweb.dev/api/auth/callback/microsoft-entra-id`
-   (add `http://localhost:3000/api/auth/callback/microsoft-entra-id` for dev)
-4. Overview page → copy **Application (client) ID** → `AUTH_MICROSOFT_ENTRA_ID_ID`
-5. Copy **Directory (tenant) ID** → issuer: `https://login.microsoftonline.com/<tenant-id>/v2.0` → `AUTH_MICROSOFT_ENTRA_ID_ISSUER`
-6. **Certificates & secrets** → New client secret → copy the **Value** (not the ID) → `AUTH_MICROSOFT_ENTRA_ID_SECRET`. Diary the expiry.
-7. API permissions: default `User.Read` (delegated) is sufficient.
-
-Staff who sign in via Microsoft are auto-created as `staff` users. `ALLOWED_EMAIL_DOMAIN=cambrianweb.com` blocks anything else.
+Follow [the Microsoft 365 setup guide](docs/microsoft-365.md). Microsoft sign-in is restricted to accounts that are both assigned to the Enterprise application and explicitly listed in `GCW_ADMIN_ALLOWED`; admitted accounts have full application access.
 
 ## Deploy to Arianrhod
 

@@ -1,11 +1,18 @@
-import { getConnection, getUnlinkedXeroContacts } from "@/lib/xero";
+import { getConnection, getUnlinkedXeroContacts, type XeroContactLite } from "@/lib/xero";
 import NewClientForm from "./NewClientForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewClientPage() {
   const conn = await getConnection();
-  const xeroContacts = conn ? await getUnlinkedXeroContacts() : [];
+  let xeroContacts: XeroContactLite[] = [];
+  if (conn) {
+    try {
+      xeroContacts = await getUnlinkedXeroContacts();
+    } catch {
+      // Xero unreachable or rate limited — creating a client by hand still works.
+    }
+  }
 
   return (
     <>

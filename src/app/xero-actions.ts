@@ -6,6 +6,14 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { isInvoiceKind } from "@/lib/status";
 import {
+  feeRemainder,
+  remainderDescription,
+  serviceLines,
+  PROJECT_FEE_ITEM_CODE,
+  adhocItemCode,
+} from "@/lib/invoicing";
+import { adhocDescription, projectFeeDescription } from "@/lib/invoice-descriptions";
+import {
   disconnect,
   getCustomers,
   getInvoicesByIds,
@@ -24,17 +32,38 @@ type ProjectWithClient = {
   client: { name: string; email: string | null; contactName: string | null; phone: string | null; xeroContactId: string | null };
 };
 
-/** Ensure the project's client exists in Xero, returning the contact id (creates + persists if needed). */
-async function ensureXeroContactId(project: ProjectWithClient): Promise<string> {
-  if (project.client.xeroContactId) return project.client.xeroContactId;
+/**
+ * Ensure a client exists in Xero, returning the contact id.
+ *
+ * Creates and persists on first use, so a client invoiced from anywhere in the
+ * app — a project, a website's renewals — ends up with one contact rather than
+ * a duplicate per entry point.
+ */
+export async function ensureContactForClient(client: {
+  id: string;
+  name: string;
+  email: string | null;
+  contactName: string | null;
+  phone: string | null;
+  xeroContactId: string | null;
+}): Promise<string> {
+  if (client.xeroContactId) return client.xeroContactId;
   const contact = await createContact({
-    name: project.client.name,
-    email: project.client.email,
-    contactName: project.client.contactName,
-    phone: project.client.phone,
+    name: client.name,
+    email: client.email,
+    contactName: client.contactName,
+    phone: client.phone,
   });
-  await prisma.client.update({ where: { id: project.clientId }, data: { xeroContactId: contact.ContactID } });
+  await prisma.client.update({
+    where: { id: client.id },
+    data: { xeroContactId: contact.ContactID },
+  });
   return contact.ContactID;
+}
+
+/** Ensure the project's client exists in Xero, returning the contact id. */
+async function ensureXeroContactId(project: ProjectWithClient): Promise<string> {
+  return ensureContactForClient({ ...project.client, id: project.clientId });
 }
 
 async function requireUser() {
@@ -137,7 +166,7 @@ export async function linkNewInvoiceFromXero(projectId: string, formData: FormDa
 }
 
 /** Raise a DRAFT ad-hoc invoice in Xero, prefilled from the project (title, hours, amount). */
-export async function raiseAdhocInvoice(projectId: string) {
+export async function raiseAdhocInvoice(projectId: string, formData?: FormData) {
   await requireUser();
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: projectId },
@@ -146,12 +175,34 @@ export async function raiseAdhocInvoice(projectId: string) {
   if (project.totalValue <= 0) throw new Error("Set the project amount before invoicing.");
 
   const hours = project.hoursDone ?? project.hoursQuoted;
-  const description = `${project.title}${hours ? ` (${hours} hrs)` : ""}`;
+  // The most recent note is usually the closest record of what was actually
+  // done, so it's the last fallback before dropping back to the bare title.
+  const latestNote = await prisma.note.findFirst({
+    where: { projectId },
+    orderBy: { createdAt: "desc" },
+    select: { body: true },
+  });
+  const description = adhocDescription({
+    title: project.title,
+    description: project.description,
+    briefText: project.briefText,
+    latestNote: latestNote?.body ?? null,
+    hours,
+  });
   const contactId = await ensureXeroContactId(project);
   const xi = await createDraftInvoice({
     contactId,
     reference: project.title,
-    lines: [{ description, quantity: 1, unitAmount: project.totalValue }],
+    lines: [
+      {
+        description,
+        quantity: 1,
+        unitAmount: project.totalValue,
+        // Not the project fee item: an ad-hoc job is general or technical
+        // website work, and the picker on the raise form says which.
+        itemCode: adhocItemCode(formData?.get("itemCode")?.toString()),
+      },
+    ],
   });
 
   await prisma.invoice.create({
@@ -248,6 +299,17 @@ export async function createXeroInvoice(projectId: string, formData: FormData) {
   const lines: InvoiceLine[] = JSON.parse(String(formData.get("lines") ?? "[]"));
   const valid = lines.filter((l) => l.description && l.quantity > 0);
   if (!valid.length) throw new Error("No line items");
+
+  // The payload arrives from the browser, so an item code could be anything.
+  // Xero rejects an unknown code with a validation error that says little about
+  // which line caused it, so unknown codes are dropped here instead: the
+  // invoice still goes out, it just lands on the default sales account.
+  const known = new Set(
+    (await prisma.xeroItem.findMany({ select: { code: true } })).map((i) => i.code)
+  );
+  for (const line of valid) {
+    if (line.itemCode && !known.has(line.itemCode)) line.itemCode = null;
+  }
   const reference = String(formData.get("reference") ?? "").trim() || project.title;
   const kind = String(formData.get("kind") ?? "");
 
@@ -273,31 +335,51 @@ export async function createXeroInvoice(projectId: string, formData: FormData) {
   redirect(`/projects/${projectId}`);
 }
 
-/** Raise a DRAFT invoice in Xero from the project's linked services (the "invoice at the end" flow). */
-export async function raiseInvoiceFromServices(projectId: string) {
+/**
+ * Raise the closing DRAFT invoice for a full project — the "invoice at the end" flow.
+ *
+ * Two independent parts, either of which the form can switch off: the additional
+ * services attached to the project, and the balance of the agreed fee left after
+ * earlier invoices (the deposit, normally). Billing services alone was the old
+ * behaviour and quietly dropped that balance, so a £5k project with a £1.5k
+ * deposit and £600 of extras closed at £600 instead of £4,100.
+ */
+export async function raiseFinalInvoice(projectId: string, formData: FormData) {
   await requireUser();
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: projectId },
-    include: { client: true, services: { orderBy: { sortOrder: "asc" } } },
+    include: { client: true, services: { orderBy: { sortOrder: "asc" } }, invoices: true },
   });
-  const lines: InvoiceLine[] = project.services
-    .filter((s) => s.quantity > 0)
-    .map((s) => ({
-      description: s.unit && s.unit !== "one-off" ? `${s.name} (per ${s.unit})` : s.name,
-      quantity: s.quantity,
-      unitAmount: s.price,
-    }));
-  if (!lines.length) throw new Error("No services on this project to invoice.");
 
+  const remainder = feeRemainder(project.totalValue, project.invoices);
+
+  const lines: InvoiceLine[] = [];
+  if (formData.get("includeRemainder") === "on" && remainder > 0) {
+    lines.push({
+      description: remainderDescription(project.title, project.invoices.length > 0),
+      quantity: 1,
+      unitAmount: remainder,
+      itemCode: PROJECT_FEE_ITEM_CODE,
+    });
+  }
+  if (formData.get("includeServices") === "on") {
+    lines.push(...serviceLines(project.services));
+  }
+  if (!lines.length) {
+    throw new Error("Nothing to invoice — select the remaining balance, some services, or both.");
+  }
+
+  const kind = String(formData.get("kind") ?? "");
+  const reference = String(formData.get("reference") ?? "").trim() || project.title;
   const contactId = await ensureXeroContactId(project);
-  const xi = await createDraftInvoice({ contactId, reference: project.title, lines });
+  const xi = await createDraftInvoice({ contactId, reference, lines });
 
   await prisma.invoice.create({
     data: {
       projectId,
       amount: xi.SubTotal,
-      reference: xi.InvoiceNumber || project.title,
-      kind: "FINAL",
+      reference: xi.InvoiceNumber || reference,
+      kind: isInvoiceKind(kind) ? kind : "FINAL",
       date: new Date(),
       paid: false,
       xeroInvoiceId: xi.InvoiceID,
@@ -327,7 +409,14 @@ export async function raiseDepositInvoice(projectId: string) {
   const xi = await createDraftInvoice({
     contactId,
     reference,
-    lines: [{ description: `Deposit (${pct}%) — ${project.title}`, quantity: 1, unitAmount: amount }],
+    lines: [
+      {
+        description: projectFeeDescription(project.title, "DEPOSIT", pct),
+        quantity: 1,
+        unitAmount: amount,
+        itemCode: PROJECT_FEE_ITEM_CODE,
+      },
+    ],
   });
 
   await prisma.invoice.create({
@@ -362,6 +451,7 @@ export async function createService(formData: FormData) {
       price: parseFloat(str(formData, "price")) || 0,
       unit: str(formData, "unit") || "one-off",
       category: str(formData, "category") || "Other",
+      xeroItemCode: str(formData, "xeroItemCode") || null,
     },
   });
   revalidatePath("/settings/services");
@@ -369,7 +459,8 @@ export async function createService(formData: FormData) {
 
 export async function updateService(id: string, formData: FormData) {
   await requireUser();
-  await prisma.service.update({
+  const before = await prisma.service.findUnique({ where: { id } });
+  const updated = await prisma.service.update({
     where: { id },
     data: {
       name: str(formData, "name"),
@@ -377,10 +468,44 @@ export async function updateService(id: string, formData: FormData) {
       price: parseFloat(str(formData, "price")) || 0,
       unit: str(formData, "unit") || "one-off",
       category: str(formData, "category") || "Other",
+      xeroItemCode: str(formData, "xeroItemCode") || null,
       active: formData.get("active") === "on",
     },
   });
+
+  // Keep catalogue-priced recurring rows in sync while preserving deliberate
+  // client overrides. A row is using the default when its current period price
+  // still equals the old catalogue price for its term.
+  if (before) {
+    const linked = await prisma.recurringService.findMany({
+      where: { catalogueServiceId: id },
+      select: { id: true, termMonths: true, sellPrice: true },
+    });
+    const periodPrice = (price: number, unit: string, months: number) =>
+      unit === "month" ? price * months : unit === "year" ? price * (months / 12) : price;
+    await prisma.recurringService.updateMany({
+      where: { catalogueServiceId: id },
+      data: { xeroItemCode: updated.xeroItemCode },
+    });
+    const writes = linked
+      .filter(
+        (row) =>
+          Math.abs(row.sellPrice - periodPrice(before.price, before.unit, row.termMonths || 12)) < 0.01
+      )
+      .map((row) =>
+        prisma.recurringService.update({
+          where: { id: row.id },
+          data: {
+            sellPrice: periodPrice(updated.price, updated.unit, row.termMonths || 12),
+          },
+        })
+      );
+    if (writes.length) await prisma.$transaction(writes);
+  }
   revalidatePath("/settings/services");
+  revalidatePath("/recurring");
+  revalidatePath("/recurring/dashboard");
+  revalidatePath("/invoices/run");
 }
 
 export async function deleteService(id: string) {

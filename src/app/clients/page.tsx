@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ClientsPage() {
   const clients = await prisma.client.findMany({
-    include: { _count: { select: { projects: true } } },
+    include: { _count: { select: { projects: true, websites: true } } },
     orderBy: { name: "asc" },
   });
 

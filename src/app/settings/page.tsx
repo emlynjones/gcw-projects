@@ -1,8 +1,13 @@
 import Link from "next/link";
-import { getConnection, xeroConfigured } from "@/lib/xero";
+import { getConnection, xeroConfigured, scopeIsCurrent } from "@/lib/xero";
 import { disconnectXero } from "@/app/xero-actions";
 import { updateAiSettings, clearAiKey } from "@/app/ai-actions";
 import { importBackupAction } from "@/app/settings/backup-actions";
+import {
+  syncXeroInvoiceLinesAction,
+  syncProgress,
+  abandonInvoiceScan,
+} from "@/app/xero-sync-actions";
 import { getAiStatus, DEFAULT_AI_MODEL } from "@/lib/settings";
 import { prisma } from "@/lib/prisma";
 import { dateFmt } from "@/lib/status";
@@ -21,16 +26,43 @@ export default async function SettingsPage({
     updated?: string;
     skipped?: string;
     warnings?: string;
+    synced?: string;
+    clients?: string;
+    invoices?: string;
+    lines?: string;
+    domains?: string;
+    remaining?: string;
+    syncErrors?: string;
   }>;
 }) {
-  const { xeroConnected, xeroError, importOk, importError, created, updated, skipped, warnings } =
-    await searchParams;
+  const {
+    xeroConnected,
+    xeroError,
+    importOk,
+    importError,
+    created,
+    updated,
+    skipped,
+    warnings,
+    synced,
+    clients: syncedClients,
+    invoices: syncedInvoices,
+    lines: syncedLines,
+    domains: syncedDomains,
+    remaining,
+    syncErrors,
+  } = await searchParams;
   const conn = await getConnection();
   const configured = xeroConfigured();
   const linkedClients = await prisma.client.count({ where: { xeroContactId: { not: null } } });
   const linkedInvoices = await prisma.invoice.count({ where: { xeroInvoiceId: { not: null } } });
   const serviceCount = await prisma.service.count({ where: { active: true } });
   const ai = await getAiStatus();
+
+  const scopeOk = scopeIsCurrent(conn?.scope);
+  const lineCount = await prisma.xeroInvoiceLine.count();
+  const lastSync = await prisma.setting.findUnique({ where: { key: "xeroLinesSyncedAt" } });
+  const progress = conn ? await syncProgress() : { done: 0, total: 0, inProgress: false };
 
   return (
     <>
@@ -50,6 +82,18 @@ export default async function SettingsPage({
       )}
       {importError === "nofile" && <div className="error-msg">Choose a backup file first.</div>}
       {importError === "badjson" && <div className="error-msg">That file isn&apos;t valid JSON.</div>}
+      {synced && (
+        <div className="success-msg">
+          Scanned {syncedClients} client(s): {syncedInvoices} invoice(s), {syncedLines} line(s),{" "}
+          {syncedDomains} domain(s) found.
+          {Number(remaining) > 0 ? (
+            <> {remaining} client(s) still to scan — run the next batch below.</>
+          ) : (
+            <> Invoice history is up to date.</>
+          )}
+          {syncErrors && <div className="small mt">Errors: {syncErrors}</div>}
+        </div>
+      )}
 
       <div className="card">
         <h2>Backup &amp; restore</h2>
@@ -96,6 +140,14 @@ export default async function SettingsPage({
               Connected to <strong>{conn.tenantName}</strong>
               <span className="muted small"> · tokens refreshed {dateFmt(conn.updatedAt)}</span>
             </p>
+            {!scopeOk && (
+              <div className="error-msg">
+                <strong>Reconnect needed.</strong> This connection was granted an old set of
+                permissions that can&apos;t read your Xero products and has no write access. Click{" "}
+                <strong>Reconnect</strong> below to grant the current ones — nothing else changes, and
+                your existing links are kept.
+              </div>
+            )}
             <p className="muted small">
               {linkedClients} client(s) and {linkedInvoices} invoice(s) linked to Xero.
             </p>
@@ -123,6 +175,78 @@ export default async function SettingsPage({
           </>
         )}
       </div>
+
+      {configured && conn && (
+        <div className="card">
+          <h2>Xero products</h2>
+          <p className="muted small">
+            Map your services to Xero&apos;s product list so invoice lines land in the right account
+            instead of all going to the default sales code. The list is pulled in{" "}
+            <strong>one API call</strong> and cached, so the mapping itself is done offline.
+          </p>
+          <Link href="/settings/xero-items" className="btn">
+            Map services to products
+          </Link>
+        </div>
+      )}
+
+      {configured && conn && (
+        <div className="card">
+          <h2>Xero invoice history</h2>
+          <p className="muted small">
+            <strong>You almost certainly don&apos;t need this.</strong> The CSV import has already
+            loaded the full ledger, and this scan fetches one client at a time, reaches back only
+            three years, and would take hundreds of API calls to end up with less. It&apos;s worth
+            running for a single client whose invoices changed in Xero since the import — the
+            website page has a per-client button for exactly that.
+          </p>
+          <p className="muted small">
+            {lineCount > 0 ? (
+              <>
+                <strong>{lineCount}</strong> invoice line(s) cached
+                {lastSync && <> · last full scan {dateFmt(new Date(lastSync.value))}</>}
+              </>
+            ) : (
+              <>Not scanned yet.</>
+            )}
+            {progress.inProgress && (
+              <>
+                {" · "}
+                <span className="paid-no">
+                  scan in progress: {progress.done} of {progress.total} clients
+                </span>
+              </>
+            )}
+          </p>
+          {!scopeOk && (
+            <p className="muted small">Reconnect Xero above before scanning.</p>
+          )}
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <form action={syncXeroInvoiceLinesAction}>
+              <button type="submit" className="btn" disabled={!scopeOk}>
+                {progress.inProgress ? "Scan next batch" : "Scan invoice history"}
+              </button>
+            </form>
+            {progress.inProgress && (
+              <form action={abandonInvoiceScan}>
+                <button type="submit" className="btn btn-secondary">
+                  Abandon this scan
+                </button>
+              </form>
+            )}
+            {lineCount > 0 && (
+              <Link href="/recurring/billed" className="btn btn-secondary">
+                View billed domains
+              </Link>
+            )}
+          </div>
+          <p className="muted small mt">
+            Runs in batches of 12 clients (a few seconds each) to stay inside Xero&apos;s rate limit —
+            press again until it reports it&apos;s up to date.
+          </p>
+        </div>
+      )}
 
       <div className="card">
         <h2>Services / price list</h2>

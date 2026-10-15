@@ -44,6 +44,7 @@ export async function createClient(formData: FormData) {
       contactName: opt(formData, "contactName"),
       email: opt(formData, "email"),
       phone: opt(formData, "phone"),
+      isInternal: str(formData, "isInternal") === "on",
     },
   });
   revalidatePath("/clients");
@@ -59,6 +60,7 @@ export async function updateClient(id: string, formData: FormData) {
       contactName: opt(formData, "contactName"),
       email: opt(formData, "email"),
       phone: opt(formData, "phone"),
+      isInternal: str(formData, "isInternal") === "on",
     },
   });
   revalidatePath(`/clients/${id}`);
@@ -376,6 +378,9 @@ export async function addStandardServicesFor(projectId: string) {
         name: svc?.name ?? w.fallback.name,
         unit: svc?.unit ?? w.fallback.unit,
         price: svc?.price ?? w.fallback.price,
+        // Copied rather than looked up at invoice time: the price is snapshotted
+        // here too, and a line should bill as whatever it was added as.
+        xeroItemCode: svc?.xeroItemCode ?? null,
         quantity: 1,
         sortOrder: order++,
       },
@@ -398,6 +403,7 @@ export async function addProjectService(projectId: string, formData: FormData) {
         name: svc.name,
         unit: svc.unit,
         price: svc.price,
+        xeroItemCode: svc.xeroItemCode,
         quantity: optNum(formData, "quantity") ?? 1,
         sortOrder: count,
       },

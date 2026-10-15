@@ -118,6 +118,53 @@ export function isLifecycle(l: string): l is Lifecycle {
   return (LIFECYCLES as readonly string[]).includes(l);
 }
 
+/**
+ * How far through its track a project is, as a sortable number.
+ *
+ * Used to put the work nearest delivery at the top of a list. `LOST` sits below
+ * everything — it isn't "early", it's out.
+ */
+export function stageRank(p: { type: string; stage: string }): number {
+  if (p.stage === LOST) return -1;
+  const track = stagesFor(p.type) as readonly string[];
+  const i = track.indexOf(p.stage);
+  return i < 0 ? -1 : i;
+}
+
+/**
+ * When a piece of ad-hoc work needs doing.
+ *
+ * An explicit target date wins; without one, the date it came in stands in, so
+ * a job with no deadline still surfaces by age rather than sinking out of
+ * sight. Sorting ascending on this puts the most pressing first.
+ */
+export function dueOrder(p: { targetDate: Date | null; createdAt: Date }): number {
+  return (p.targetDate ?? p.createdAt).getTime();
+}
+
+/**
+ * Work that's finished and shouldn't crowd a "what needs doing" view.
+ *
+ * A live site and an invoiced ad-hoc job are both done — they belong in the
+ * archive, not at the top of the dashboard. Ad-hoc work marked DONE counts too,
+ * though it's worth chasing separately: see `awaitingInvoice`.
+ */
+export function isFinished(p: { type: string; stage: string; archived: boolean }): boolean {
+  if (p.archived) return true;
+  if (p.type === "ADHOC") return p.stage === "DONE" || p.stage === "INVOICED";
+  return p.stage === "LIVE";
+}
+
+/**
+ * Ad-hoc work that's been delivered but never billed.
+ *
+ * Hidden from the main list along with everything else finished, but the one
+ * finished state that still owes money, so it's worth a line of its own.
+ */
+export function awaitingInvoice(p: { type: string; stage: string; archived: boolean }): boolean {
+  return !p.archived && p.type === "ADHOC" && p.stage === "DONE";
+}
+
 export function lifecycleOf(p: { type: string; stage: string; archived: boolean }): Lifecycle {
   if (p.archived) return "ARCHIVED";
   if (p.stage === LOST) return "LOST";

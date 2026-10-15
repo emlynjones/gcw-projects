@@ -5,8 +5,11 @@ WORKDIR /app
 # e2e-only dev dependency; never download browsers during the image build.
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 COPY package.json package-lock.json* ./
-COPY prisma ./prisma
-RUN npm ci
+# Dependency installation depends only on the lockfile. Keeping Prisma out of
+# this layer means an ordinary schema change does not trigger a full download.
+# Generation runs in the builder once the current schema has been copied.
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --ignore-scripts --prefer-offline --no-audit
 
 FROM node:22-alpine AS builder
 RUN apk add --no-cache openssl
@@ -29,6 +32,7 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/scripts ./scripts
 
 # Prisma CLI + schema + seed for db push / seeding at container start
 COPY --from=builder /app/node_modules ./node_modules

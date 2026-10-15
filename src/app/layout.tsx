@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
+import GlobalSearch from "@/app/components/GlobalSearch";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -29,11 +30,28 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </Link>
               <nav>
                 <Link href="/">Dashboard</Link>
-                <Link href="/projects">Projects</Link>
+                <div className="nav-group">
+                  <Link href="/projects">Work</Link>
+                  <div className="nav-menu">
+                    <Link href="/projects?type=PROJECT">Projects</Link>
+                    <Link href="/projects?type=ADHOC">Ad-hoc</Link>
+                  </div>
+                </div>
                 <Link href="/clients">Clients</Link>
+                <Link href="/websites">Websites</Link>
+                <div className="nav-group">
+                  <Link href="/recurring/dashboard">Recurring</Link>
+                  <div className="nav-menu">
+                    <Link href="/recurring/dashboard">Overview</Link>
+                    <Link href="/recurring/microsoft-365">Microsoft 365</Link>
+                    <Link href="/recurring/careplans">Care plans</Link>
+                    <Link href="/recurring">All services</Link>
+                  </div>
+                </div>
                 <Link href="/reports">Reports</Link>
                 <Link href="/settings">Settings</Link>
               </nav>
+              <GlobalSearch />
               <div className="topbar-user">
                 <span>{session.user.name ?? session.user.email}</span>
                 <form

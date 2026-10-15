@@ -35,6 +35,10 @@ export default function NewClientForm({
             <label htmlFor="name">Company / organisation name</label>
             <input id="name" name="name" required />
           </div>
+          <label className="check-row">
+            <input type="checkbox" name="isInternal" />
+            <span><strong>This client is us</strong><small>Track its websites and services, but never invoice them.</small></span>
+          </label>
           <div className="row">
             <div className="field">
               <label htmlFor="contactName">Contact name</label>

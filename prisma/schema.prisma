@@ -8,47 +8,51 @@ datasource db {
 }
 
 model Client {
-  id            String    @id @default(cuid())
-  name          String
-  contactName   String?
-  email         String?
-  phone         String?
-  xeroContactId String? // Xero sync deferred — field reserved
-  projects      Project[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                String             @id @default(cuid())
+  name              String
+  contactName       String?
+  email             String?
+  phone             String?
+  isInternal        Boolean            @default(false)
+  xeroContactId     String? // Xero sync deferred — field reserved
+  projects          Project[]
+  websites          Website[]
+  recurringServices RecurringService[]
+  xeroInvoiceLines  XeroInvoiceLine[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 }
 
 model Project {
-  id          String       @id @default(cuid())
-  title       String
-  clientId    String
-  client      Client       @relation(fields: [clientId], references: [id])
-  type        String       @default("PROJECT") // PROJECT | ADHOC — drives stage track + invoicing UI
-  stage       String       @default("ENQUIRY") // per-type stage track; lifecycle derived (see lib/status.ts)
-  archived    Boolean      @default(false) // orthogonal to stage — anything can be archived
-  totalValue  Float        @default(0) // ex-VAT
-  depositPct  Float        @default(30) // deposit % of total (full projects)
-  startDate   DateTime? // month-level precision is fine — stored as 1st of month from bulk add
-  targetDate  DateTime? // expected finish
-  completedDate DateTime? // actual completion — auto-set when a project goes LIVE; used for duration reporting
-  hoursQuoted Float? // ad-hoc: hours quoted
-  hoursDone   Float? // ad-hoc: hours actually done
-  description String? // free-text overview / scope
-  briefText   String? // tender / brief as free text (or use a BRIEF file)
-  siteStructure String? // plain-text proposed site structure / sitemap
-  structureApproved Boolean @default(false) // client has signed off the structure
-  aiNextSteps String? // AI-generated "what to do next" (cached; refreshed on demand)
-  aiNextStepsAt DateTime? // when aiNextSteps was last generated
-  proposalUrl String?
-  invoices    Invoice[]
-  notes       Note[]
-  attachments Attachment[]
-  devSites    DevSite[]
-  files       ProjectFile[]
-  services    ProjectService[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id                String           @id @default(cuid())
+  title             String
+  clientId          String
+  client            Client           @relation(fields: [clientId], references: [id])
+  type              String           @default("PROJECT") // PROJECT | ADHOC — drives stage track + invoicing UI
+  stage             String           @default("ENQUIRY") // per-type stage track; lifecycle derived (see lib/status.ts)
+  archived          Boolean          @default(false) // orthogonal to stage — anything can be archived
+  totalValue        Float            @default(0) // ex-VAT
+  depositPct        Float            @default(30) // deposit % of total (full projects)
+  startDate         DateTime? // month-level precision is fine — stored as 1st of month from bulk add
+  targetDate        DateTime? // expected finish
+  completedDate     DateTime? // actual completion — auto-set when a project goes LIVE; used for duration reporting
+  hoursQuoted       Float? // ad-hoc: hours quoted
+  hoursDone         Float? // ad-hoc: hours actually done
+  description       String? // free-text overview / scope
+  briefText         String? // tender / brief as free text (or use a BRIEF file)
+  siteStructure     String? // plain-text proposed site structure / sitemap
+  structureApproved Boolean          @default(false) // client has signed off the structure
+  aiNextSteps       String? // AI-generated "what to do next" (cached; refreshed on demand)
+  aiNextStepsAt     DateTime? // when aiNextSteps was last generated
+  proposalUrl       String?
+  invoices          Invoice[]
+  notes             Note[]
+  attachments       Attachment[]
+  devSites          DevSite[]
+  files             ProjectFile[]
+  services          ProjectService[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 }
 
 // Repeatable dev/staging URLs for a project; one may be marked approved.
@@ -67,9 +71,9 @@ model ProjectFile {
   id        String   @id @default(cuid())
   projectId String
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  kind      String   // PROPOSAL | BRIEF | OTHER
-  filename  String   // original filename shown to the user
-  path      String   // path relative to the uploads dir
+  kind      String // PROPOSAL | BRIEF | OTHER
+  filename  String // original filename shown to the user
+  path      String // path relative to the uploads dir
   mime      String?
   size      Int?
   createdAt DateTime @default(now())
@@ -77,16 +81,17 @@ model ProjectFile {
 
 // Services attached to a project — the basis for the final invoice.
 model ProjectService {
-  id        String   @id @default(cuid())
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  serviceId String? // optional link back to the price-list Service
-  name      String
-  unit      String   @default("one-off")
-  price     Float    @default(0) // ex-VAT unit price
-  quantity  Float    @default(1)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  serviceId    String? // optional link back to the price-list Service
+  name         String
+  unit         String   @default("one-off")
+  price        Float    @default(0) // ex-VAT unit price
+  quantity     Float    @default(1)
+  sortOrder    Int      @default(0)
+  xeroItemCode String? // copied from the price list when added, editable after
+  createdAt    DateTime @default(now())
 }
 
 // App-wide key/value settings. Secret values (AI API keys) are stored encrypted.
@@ -102,7 +107,7 @@ model Invoice {
   project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   amount        Float // ex-VAT
   reference     String
-  kind          String?  // DEPOSIT | INTERIM | FINAL | null (untagged/other)
+  kind          String? // DEPOSIT | INTERIM | FINAL | null (untagged/other)
   date          DateTime @default(now())
   paid          Boolean  @default(false)
   xeroInvoiceId String? // linked Xero invoice (InvoiceID)
@@ -110,6 +115,24 @@ model Invoice {
   xeroStatus    String? // DRAFT | SUBMITTED | AUTHORISED | PAID | VOIDED
   xeroSynced    Boolean  @default(false)
   createdAt     DateTime @default(now())
+}
+
+/// A local copy of Xero's product/service list.
+///
+/// Pulled in one call and then used offline: mapping a few dozen services to
+/// items is a job done in one sitting, and hitting the API on every page render
+/// to populate a dropdown would burn the daily budget for no gain. Keyed on
+/// Code because that is what an invoice line carries; ItemID is kept so a code
+/// renamed in Xero can still be recognised on the next sync.
+model XeroItem {
+  code        String   @id
+  itemId      String   @unique
+  name        String
+  description String? // SalesDetails.Description — Xero's own default wording
+  unitPrice   Float?
+  accountCode String? // the item's sales account, which beats our default of 200
+  isSold      Boolean  @default(true)
+  syncedAt    DateTime @default(now())
 }
 
 // Single-row table: the app-wide Xero org connection (GCW's own books)
@@ -125,14 +148,16 @@ model XeroConnection {
 }
 
 model Service {
-  id          String  @id @default(cuid())
-  name        String  @unique
-  description String?
-  price       Float // ex-VAT
-  unit        String  @default("one-off") // one-off | month | year | hour | session | day | half-day
-  category    String
-  active      Boolean @default(true)
-  sortOrder   Int     @default(0)
+  id                String             @id @default(cuid())
+  name              String             @unique
+  description       String?
+  price             Float // ex-VAT
+  unit              String             @default("one-off") // one-off | month | year | hour | session | day | half-day
+  category          String
+  active            Boolean            @default(true)
+  sortOrder         Int                @default(0)
+  xeroItemCode      String? // Xero product this bills as — see XeroItem
+  recurringServices RecurringService[]
 }
 
 model Note {
@@ -162,6 +187,139 @@ model User {
   provider     String // entra | credentials
   passwordHash String?
   createdAt    DateTime @default(now())
+}
+
+// A website we look after — the hub that domains/hosting/O365 hang off.
+model Website {
+  id        String             @id @default(cuid())
+  clientId  String?
+  client    Client?            @relation(fields: [clientId], references: [id])
+  name      String // primary label, usually the registrable domain
+  url       String?
+  notes     String?
+  services  RecurringService[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([clientId])
+}
+
+// An annually-billed recurring item: domain, hosting, O365 licences.
+model RecurringService {
+  id                 String            @id @default(cuid())
+  clientId           String? // null until matched — surfaced in the Unassigned queue
+  client             Client?           @relation(fields: [clientId], references: [id])
+  websiteId          String?
+  website            Website?          @relation(fields: [websiteId], references: [id])
+  catalogueServiceId String?
+  catalogueService   Service?          @relation(fields: [catalogueServiceId], references: [id], onDelete: SetNull)
+  kind               String // DOMAIN | HOSTING | O365 | OTHER
+  label              String // domain name / plan name / licence name
+  provider           String? // 123 Reg | Cloud.Market | <hosting provider>
+  /// Who buys and holds this: GCW | CLIENT | THIRD_PARTY.
+  /// Only GCW-managed services are billed on, so anything else is tracked for
+  /// oversight — we still want to know a domain exists and who holds it — but
+  /// never counted as unbilled revenue and never offered on an invoice.
+  managedBy          String            @default("GCW")
+  externalRef        String? // provider's own id — dedupe key on re-import
+  quantity           Float             @default(1) // O365 seat count
+  costPrice          Float             @default(0) // what GCW pays per unit, ex-VAT — see costBasis
+  costBasis          String            @default("ANNUAL") // MONTHLY | ANNUAL — suppliers bill O365 either way
+  sellPrice          Float             @default(0) // what the client is charged per unit per year, ex-VAT
+  renewalDate        DateTime? // next renewal / expiry
+  termMonths         Int               @default(12)
+  /// Set when the service has been told not to renew.
+  /// Distinct from `active`, which hides a row outright. A cancelled service is
+  /// still running: its current term stays billable if it was never invoiced,
+  /// and it still shows on its website. What stops is the *next* renewal — no
+  /// advance billing, and nothing in the forward calendar.
+  cancelledAt        DateTime?
+  active             Boolean           @default(true)
+  xeroItemCode       String? // Xero product to bill this as
+  notes              String?
+  billings           ServiceBilling[]
+  invoiceLines       XeroInvoiceLine[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([clientId])
+  @@index([websiteId])
+  @@index([catalogueServiceId])
+  @@index([kind])
+}
+
+// One billing period for a recurring service, linked to the Xero invoice covering it.
+model ServiceBilling {
+  id                 String           @id @default(cuid())
+  recurringServiceId String
+  service            RecurringService @relation(fields: [recurringServiceId], references: [id], onDelete: Cascade)
+  periodStart        DateTime
+  periodEnd          DateTime
+  amount             Float // ex-VAT
+  xeroInvoiceId      String?
+  xeroNumber         String?
+  xeroStatus         String? // DRAFT | SUBMITTED | AUTHORISED | PAID | VOIDED
+  xeroLineIndex      Int? // which line on that invoice — keeps the evidence re-findable
+  matchedBy          String           @default("MANUAL") // AUTO | MANUAL | CREATED
+  createdAt          DateTime         @default(now())
+
+  @@unique([recurringServiceId, periodStart])
+}
+
+// Cached Xero invoice lines — ground truth for "who has been billed for what".
+// Drives both client matching on import and already-billed detection.
+model XeroInvoiceLine {
+  id            String   @id @default(cuid())
+  xeroInvoiceId String
+  lineIndex     Int      @default(0) // position within the invoice — with xeroInvoiceId, the sync key
+  xeroNumber    String?
+  contactId     String
+  clientId      String? // resolved via Client.xeroContactId
+  client        Client?  @relation(fields: [clientId], references: [id])
+  invoiceDate   DateTime
+  status        String // DRAFT | SUBMITTED | AUTHORISED | PAID
+  reference     String?
+  description   String
+  quantity      Float    @default(1)
+  unitAmount    Float    @default(0)
+  lineAmount    Float    @default(0) // ex-VAT
+  itemCode      String?
+  domains       String? // JSON string[] of registrable domains found in description/reference
+  syncedAt      DateTime @default(now())
+
+  // What this line pays for. `reviewed` covers both outcomes of a human looking
+  // at it — linked, or deliberately dismissed — so a dismissed line isn't
+  // re-proposed on every scan. The Xero sync never writes either column, so
+  // re-syncing refreshes the invoice data and leaves these decisions intact.
+  recurringServiceId String?
+  service            RecurringService? @relation(fields: [recurringServiceId], references: [id])
+  reviewed           Boolean           @default(false)
+
+  @@unique([xeroInvoiceId, lineIndex])
+  @@index([clientId])
+  @@index([recurringServiceId])
+}
+
+// Invoice number → GUID index for the whole sales ledger.
+//
+// A Xero CSV export carries no InvoiceID, which costs us two things: a link
+// back to the invoice, and the ContactID. Matching 370 contact *names* by
+// string similarity is guesswork; the ContactID resolves a client exactly, via
+// Client.xeroContactId, the same way the API sync does.
+//
+// Cheap to build because it's summary-only — no line items, 100 invoices per
+// call, so the entire ledger costs ~44 calls against a 5,000/day budget. The
+// CSV then supplies the line detail the summary omits.
+model XeroInvoiceRef {
+  xeroNumber    String   @id // InvoiceNumber — unique per ledger, and the CSV's only handle
+  xeroInvoiceId String
+  contactId     String
+  contactName   String?
+  invoiceDate   DateTime
+  status        String // DRAFT | SUBMITTED | AUTHORISED | PAID | VOIDED
+  syncedAt      DateTime @default(now())
+
+  @@index([xeroInvoiceId])
 }
 
 // Dynamically registered OAuth clients (RFC 7591) — e.g. claude.ai self-registers on first connect.

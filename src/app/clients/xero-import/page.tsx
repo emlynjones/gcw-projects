@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { getConnection, getUnlinkedXeroContacts } from "@/lib/xero";
+import { getConnection, getUnlinkedXeroContacts, type XeroContactLite } from "@/lib/xero";
 import { importXeroContacts } from "@/app/xero-actions";
 
 export const dynamic = "force-dynamic";
@@ -20,10 +20,16 @@ export default async function XeroImportPage() {
     );
   }
 
-  const [unlinked, linkedCount] = await Promise.all([
-    getUnlinkedXeroContacts(),
-    prisma.client.count({ where: { xeroContactId: { not: null } } }),
-  ]);
+  const linkedCount = await prisma.client.count({ where: { xeroContactId: { not: null } } });
+  let unlinked: XeroContactLite[] = [];
+  let xeroError: string | null = null;
+  try {
+    unlinked = await getUnlinkedXeroContacts();
+  } catch (e) {
+    // Say what happened rather than throwing the whole page away — a rate limit
+    // clears on its own, and the message should say so.
+    xeroError = e instanceof Error ? e.message : String(e);
+  }
 
   return (
     <>
@@ -33,6 +39,8 @@ export default async function XeroImportPage() {
           {conn.tenantName} · {unlinked.length + linkedCount} customers · {linkedCount} already linked
         </span>
       </div>
+
+      {xeroError && <div className="error-msg">{xeroError}</div>}
 
       <div className="card">
         <p className="muted small">

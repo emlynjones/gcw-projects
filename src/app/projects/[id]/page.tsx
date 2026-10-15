@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { xeroInvoiceUrl } from "@/lib/xero-links";
 import {
   updateProject,
   updateProjectDocs,
@@ -54,11 +55,14 @@ import {
   createXeroInvoice,
   raiseDepositInvoice,
   raiseAdhocInvoice,
-  raiseInvoiceFromServices,
+  raiseFinalInvoice,
   linkNewInvoiceFromXero,
   syncProjectInvoices,
 } from "@/app/xero-actions";
+import { ADHOC_ITEM_CODES, ADHOC_ITEM_CODE_DEFAULT, feeRemainder } from "@/lib/invoicing";
 import InvoiceBuilder from "./InvoiceBuilder";
+import InvoiceCta, { invoiceDue } from "./InvoiceCta";
+import FinalInvoicePanel from "./FinalInvoicePanel";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +97,22 @@ export default async function ProjectPage({
   const priceList = await prisma.service.findMany({
     where: { active: true },
     orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
-    select: { id: true, name: true, price: true, unit: true, category: true },
+    select: { id: true, name: true, price: true, unit: true, category: true, xeroItemCode: true },
+  });
+  // Cached locally — this page costs no Xero calls to render the picker.
+  // The client's sites, so a hosting or domain line can name one.
+  const clientDomains = (
+    await prisma.website.findMany({
+      where: { clientId: project.clientId },
+      select: { name: true, url: true },
+    })
+  )
+    .map((w) => (w.url ?? w.name).replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, ""))
+    .filter(Boolean);
+
+  const xeroItems = await prisma.xeroItem.findMany({
+    orderBy: { code: "asc" },
+    select: { code: true, name: true },
   });
   const servicesTotal = project.services.reduce((s, x) => s + x.price * x.quantity, 0);
   const proposalFiles = project.files.filter((f) => f.kind === "PROPOSAL");
@@ -109,6 +128,14 @@ export default async function ProjectPage({
   const left = project.totalValue - invoiced;
   const depositAmount = Math.round(project.totalValue * (project.depositPct / 100) * 100) / 100;
   const hasDeposit = project.invoices.some((i) => i.kind === "DEPOSIT");
+  // What the closing invoice would bill: the unbilled fee plus the extras on top.
+  const remainder = feeRemainder(project.totalValue, project.invoices);
+  const invoiceLines = project.services.map((s) => ({
+    name: s.name,
+    unit: s.unit,
+    price: s.price,
+    quantity: s.quantity,
+  }));
 
   const xeroConn = await getConnection();
   const showAddModal = modal === "add";
@@ -119,7 +146,14 @@ export default async function ProjectPage({
       ? await prisma.service.findMany({
           where: { active: true },
           orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
-          select: { id: true, name: true, price: true, unit: true, category: true },
+          select: {
+            id: true,
+            name: true,
+            price: true,
+            unit: true,
+            category: true,
+            xeroItemCode: true,
+          },
         })
       : [];
 
@@ -180,6 +214,8 @@ export default async function ProjectPage({
         </div>
       )}
 
+      <InvoiceCta project={project} xeroConnected={!!xeroConn} />
+
       {/* Next action */}
       <div className="card next-action">
         <h2>What&apos;s next</h2>
@@ -192,7 +228,7 @@ export default async function ProjectPage({
               </button>
             </form>
           )}
-          {action.suggestInvoice && (
+          {action.suggestInvoice && !invoiceDue(project) && (
             <Link href={`${base}?modal=add`} className="btn btn-secondary">
               {isAdhoc ? "Invoice this job" : !hasDeposit && project.stage === "ONBOARDING" ? "Raise deposit" : "Add invoice"}
             </Link>
@@ -251,6 +287,9 @@ export default async function ProjectPage({
         <div className="fact">
           <div className="label">Left to invoice</div>
           <div className="value">{gbp(left)}</div>
+          {!isAdhoc && servicesTotal > 0 && (
+            <div className="muted small">+ {gbp(servicesTotal)} services on top</div>
+          )}
         </div>
         <div className="fact">
           <div className="label">Start</div>
@@ -605,12 +644,19 @@ export default async function ProjectPage({
                 </button>
               </form>
             </div>
-            {xeroConn && project.services.length > 0 && (
-              <form action={raiseInvoiceFromServices.bind(null, project.id)} className="mt">
-                <button type="submit" className="btn">
-                  Raise invoice from these services (DRAFT in Xero)
-                </button>
-              </form>
+            {xeroConn && (
+              <div className="mt" style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+                <h3 style={{ margin: "0 0 8px" }}>Raise the closing invoice</h3>
+                <FinalInvoicePanel
+                  action={raiseFinalInvoice.bind(null, project.id)}
+                  services={invoiceLines}
+                  remainder={remainder}
+                  totalValue={project.totalValue}
+                  invoiced={invoiced}
+                  defaultReference={project.title}
+                  kindOptions={INVOICE_KINDS.map((k) => ({ value: k, label: invoiceKindLabel(k) as string }))}
+                />
+              </div>
             )}
           </div>
 
@@ -713,9 +759,16 @@ export default async function ProjectPage({
                 <td className="num">{gbp(inv.amount)}</td>
                 <td>
                   {inv.xeroInvoiceId ? (
-                    <span className={`badge badge-xero-${inv.xeroStatus ?? "DRAFT"}`}>
-                      {inv.xeroNumber ?? "Xero"} · {inv.xeroStatus ?? "?"}
-                    </span>
+                    <a
+                      href={xeroInvoiceUrl(inv.xeroInvoiceId) ?? "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Open in Xero to review and send"
+                    >
+                      <span className={`badge badge-xero-${inv.xeroStatus ?? "DRAFT"}`}>
+                        {inv.xeroNumber ?? "Xero"} · {inv.xeroStatus ?? "?"}
+                      </span>
+                    </a>
                   ) : (
                     <span className="muted small">—</span>
                   )}
@@ -1013,9 +1066,24 @@ export default async function ProjectPage({
                       {project.hoursDone ?? project.hoursQuoted
                         ? ` (${project.hoursDone ?? project.hoursQuoted} hrs)`
                         : ""}{" "}
-                      — {gbp(project.totalValue)} ex-VAT, tagged Ad-hoc work.
+                      — {gbp(project.totalValue)} ex-VAT, tagged Ad-hoc work and billed against
+                      the Xero product picked below.
                     </p>
-                    <form action={raiseAdhocInvoice.bind(null, project.id)}>
+                    <form action={raiseAdhocInvoice.bind(null, project.id)} className="inline-form">
+                      <div className="field">
+                        <label htmlFor="adhoc-item-modal">Bill as</label>
+                        <select
+                          id="adhoc-item-modal"
+                          name="itemCode"
+                          defaultValue={ADHOC_ITEM_CODE_DEFAULT}
+                        >
+                          {ADHOC_ITEM_CODES.map((c) => (
+                            <option key={c.code} value={c.code}>
+                              {c.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                       <button type="submit" className="btn" disabled={project.totalValue <= 0}>
                         Raise {gbp(project.totalValue)} invoice (DRAFT in Xero)
                       </button>
@@ -1038,6 +1106,28 @@ export default async function ProjectPage({
                   </div>
                 )}
 
+                {!isAdhoc && (
+                  <div className="modal-section">
+                    <h3>Closing invoice</h3>
+                    <p className="muted small">
+                      The balance of the agreed fee plus any additional services attached to this
+                      project.
+                    </p>
+                    <FinalInvoicePanel
+                      action={raiseFinalInvoice.bind(null, project.id)}
+                      services={invoiceLines}
+                      remainder={remainder}
+                      totalValue={project.totalValue}
+                      invoiced={invoiced}
+                      defaultReference={project.title}
+                      kindOptions={INVOICE_KINDS.map((k) => ({
+                        value: k,
+                        label: invoiceKindLabel(k) as string,
+                      }))}
+                    />
+                  </div>
+                )}
+
                 <div className="modal-section">
                   <h3>Build an invoice</h3>
                   {!project.client.xeroContactId && (
@@ -1048,6 +1138,8 @@ export default async function ProjectPage({
                   )}
                   <InvoiceBuilder
                     services={services}
+                    items={xeroItems}
+                    domains={clientDomains}
                     defaultReference={project.title}
                     action={createXeroInvoice.bind(null, project.id)}
                     kindOptions={INVOICE_KINDS.map((k) => ({ value: k, label: invoiceKindLabel(k) as string }))}

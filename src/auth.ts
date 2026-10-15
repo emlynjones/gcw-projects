@@ -9,9 +9,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   providers: [
     MicrosoftEntraID({
-      clientId: process.env.AUTH_MICROSOFT_ENTRA_ID_ID,
-      clientSecret: process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET,
-      issuer: process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
+      clientId: process.env.GCW_O365_CLIENT_ID,
+      clientSecret: process.env.GCW_O365_CLIENT_SECRET,
+      issuer: process.env.GCW_O365_TENANT_ID
+        ? `https://login.microsoftonline.com/${process.env.GCW_O365_TENANT_ID}/v2.0`
+        : undefined,
     }),
     Credentials({
       name: "Admin login",
@@ -33,12 +35,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     ...authConfig.callbacks,
-    async signIn({ user, account }) {
+    async signIn({ user, account, profile }) {
       if (account?.provider === "microsoft-entra-id") {
-        const email = user.email?.toLowerCase() ?? "";
+        const microsoftProfile = profile as
+          | { email?: string; preferred_username?: string }
+          | undefined;
+        const email = (
+          user.email ??
+          microsoftProfile?.preferred_username ??
+          microsoftProfile?.email ??
+          ""
+        )
+          .trim()
+          .toLowerCase();
         if (!email) return false;
-        const domain = process.env.ALLOWED_EMAIL_DOMAIN; // e.g. cambrianweb.com — leave unset to allow any tenant account
-        if (domain && !email.endsWith(`@${domain.toLowerCase()}`)) return false;
+
+        const allowed = new Set(
+          (process.env.GCW_ADMIN_ALLOWED ?? "")
+            .split(",")
+            .map((address) => address.trim().toLowerCase())
+            .filter(Boolean),
+        );
+        if (!allowed.has(email)) return false;
+
         await prisma.user.upsert({
           where: { email },
           update: { name: user.name ?? email },

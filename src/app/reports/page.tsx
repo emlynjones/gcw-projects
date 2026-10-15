@@ -50,6 +50,9 @@ export default async function ReportsPage() {
       <div className="page-head no-print">
         <h1>Weekly report</h1>
         <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/reports/recurring" className="btn btn-secondary">
+            Not yet billed
+          </Link>
           {ai.configured && (
             <form action={generateAllNextSteps}>
               <button type="submit" className="btn btn-secondary" title="Regenerate AI next steps for all active work">

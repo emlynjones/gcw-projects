@@ -9,6 +9,9 @@ import {
   stageAction,
   PROJECT_STAGES,
   LOST,
+  isFinished,
+  dueOrder,
+  awaitingInvoice,
 } from "@/lib/status";
 
 export const dynamic = "force-dynamic";
@@ -35,15 +38,27 @@ export default async function Dashboard() {
     .filter((i) => !i.paid)
     .reduce((s, i) => s + i.amount, 0);
 
-  // Ongoing ad-hoc: anything not yet invoiced (and not lost)
-  const adhoc = withLife.filter((p) => p.type === "ADHOC" && p.stage !== "INVOICED" && p.stage !== LOST);
+  // Ad-hoc still to do, most pressing first — an explicit target date if there
+  // is one, otherwise how long it's been waiting. Finished work is deliberately
+  // absent: it lives in the archive on the ad-hoc page.
+  const adhoc = withLife
+    .filter((p) => p.type === "ADHOC" && p.stage !== LOST && !isFinished(p))
+    .sort((a, b) => dueOrder(a) - dueOrder(b));
 
-  // Full projects grouped by stage, in track order
-  const fulls = withLife.filter((p) => p.type === "PROJECT" && p.stage !== LOST);
-  const groups = PROJECT_STAGES.map((stage) => ({
-    stage,
-    items: fulls.filter((p) => p.stage === stage),
-  })).filter((g) => g.items.length > 0);
+  // Delivered but never billed — the one finished state that still owes money,
+  // so it gets a line rather than disappearing into the archive.
+  const toInvoice = withLife.filter(awaitingInvoice);
+  const toInvoiceValue = toInvoice.reduce((s, p) => s + p.totalValue, 0);
+
+  // Projects grouped by stage, nearest delivery first: a site in GO_LIVE wants
+  // attention today in a way an enquiry doesn't. Live sites drop out entirely.
+  const fulls = withLife.filter((p) => p.type === "PROJECT" && p.stage !== LOST && !isFinished(p));
+  const groups = [...PROJECT_STAGES]
+    .reverse()
+    .map((stage) => ({ stage, items: fulls.filter((p) => p.stage === stage) }))
+    .filter((g) => g.items.length > 0);
+
+  const finishedCount = withLife.filter((p) => p.stage !== LOST && isFinished(p)).length;
 
   return (
     <>
@@ -84,7 +99,20 @@ export default async function Dashboard() {
         </div>
       </div>
 
-      {/* Compact ongoing ad-hoc list */}
+      {toInvoice.length > 0 && (
+        <div className="card">
+          <p style={{ margin: 0 }}>
+            <strong>
+              {toInvoice.length} ad-hoc job{toInvoice.length === 1 ? "" : "s"} done and not yet
+              invoiced
+            </strong>{" "}
+            — {gbp(toInvoiceValue)}.{" "}
+            <Link href="/projects?type=ADHOC&life=COMPLETE">Bill them</Link>.
+          </p>
+        </div>
+      )}
+
+      {/* Ad-hoc still to do, most pressing first */}
       <div className="card">
         <div className="page-head" style={{ marginBottom: 10 }}>
           <h2 style={{ margin: 0 }}>Ad-hoc work</h2>
@@ -94,7 +122,7 @@ export default async function Dashboard() {
         </div>
         {adhoc.length === 0 ? (
           <p className="muted small" style={{ margin: 0 }}>
-            Nothing ongoing.
+            Nothing outstanding.
           </p>
         ) : (
           <table className="compact">
@@ -112,6 +140,15 @@ export default async function Dashboard() {
                   <td className="num muted small">
                     {p.hoursQuoted ?? "—"}h quoted · {p.hoursDone ?? "—"}h done
                   </td>
+                  <td className="num small">
+                    {p.targetDate ? (
+                      <span className={p.targetDate < new Date() ? "paid-no" : "muted"}>
+                        due {dateFmt(p.targetDate)}
+                      </span>
+                    ) : (
+                      <span className="muted">since {monthFmt(p.createdAt)}</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -119,7 +156,7 @@ export default async function Dashboard() {
         )}
       </div>
 
-      {/* Projects by stage */}
+      {/* Projects by stage, nearest delivery first */}
       <div className="page-head" style={{ marginBottom: 10 }}>
         <h2 style={{ margin: 0 }}>Projects by stage</h2>
         <Link href="/projects" className="small">
@@ -128,7 +165,13 @@ export default async function Dashboard() {
       </div>
       {groups.length === 0 && (
         <p className="muted">
-          No projects yet. <Link href="/projects/new">Create the first one</Link>.
+          Nothing in flight. <Link href="/projects/new">Start a project</Link>
+          {finishedCount > 0 && (
+            <>
+              , or look through the <Link href="/projects">{finishedCount} finished</Link>
+            </>
+          )}
+          .
         </p>
       )}
       {groups.map(({ stage, items }) => (

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { isStageFor, isProjectType, isInvoiceKind, canMarkLost, LOST } from "@/lib/status";
-import { importOneXeroContact } from "@/app/xero-actions";
+import { importXeroContact } from "@/modules/accounting/xero/contacts";
 import { saveUpload, deleteUpload } from "@/lib/files";
 
 async function requireUser() {
@@ -208,7 +208,7 @@ export async function deleteProject(id: string) {
 async function resolveClientId(value: string): Promise<string | null> {
   if (!value) return null;
   if (value.startsWith("xero:")) {
-    const client = await importOneXeroContact(value.slice(5));
+    const client = await importXeroContact(value.slice(5));
     return client.id;
   }
   return value;

@@ -17,13 +17,15 @@ import {
   disconnect,
   getCustomers,
   getInvoicesByIds,
-  createContact,
   createDraftInvoice,
   parseXeroDate,
-  contactPhone,
   type InvoiceLine,
-  type XeroContact,
 } from "@/lib/xero";
+import {
+  ensureXeroContactForClient,
+  importXeroContact,
+  upsertClientFromXeroContact,
+} from "@/modules/accounting/xero/contacts";
 
 type ProjectWithClient = {
   id: string;
@@ -32,38 +34,9 @@ type ProjectWithClient = {
   client: { name: string; email: string | null; contactName: string | null; phone: string | null; xeroContactId: string | null };
 };
 
-/**
- * Ensure a client exists in Xero, returning the contact id.
- *
- * Creates and persists on first use, so a client invoiced from anywhere in the
- * app — a project, a website's renewals — ends up with one contact rather than
- * a duplicate per entry point.
- */
-export async function ensureContactForClient(client: {
-  id: string;
-  name: string;
-  email: string | null;
-  contactName: string | null;
-  phone: string | null;
-  xeroContactId: string | null;
-}): Promise<string> {
-  if (client.xeroContactId) return client.xeroContactId;
-  const contact = await createContact({
-    name: client.name,
-    email: client.email,
-    contactName: client.contactName,
-    phone: client.phone,
-  });
-  await prisma.client.update({
-    where: { id: client.id },
-    data: { xeroContactId: contact.ContactID },
-  });
-  return contact.ContactID;
-}
-
 /** Ensure the project's client exists in Xero, returning the contact id. */
 async function ensureXeroContactId(project: ProjectWithClient): Promise<string> {
-  return ensureContactForClient({ ...project.client, id: project.clientId });
+  return ensureXeroContactForClient({ ...project.client, id: project.clientId });
 }
 
 async function requireUser() {
@@ -76,29 +49,6 @@ export async function disconnectXero() {
   await requireUser();
   await disconnect();
   revalidatePath("/settings");
-}
-
-/** Create or link the local client for a Xero contact (matched by xeroContactId, email, or name). */
-async function upsertClientFromXeroContact(c: XeroContact) {
-  const existing = await prisma.client.findFirst({
-    where: {
-      OR: [
-        { xeroContactId: c.ContactID },
-        ...(c.EmailAddress ? [{ email: c.EmailAddress }] : []),
-        { name: c.Name },
-      ],
-    },
-  });
-  const data = {
-    name: c.Name,
-    contactName: [c.FirstName, c.LastName].filter(Boolean).join(" ") || null,
-    email: c.EmailAddress || null,
-    phone: contactPhone(c),
-    xeroContactId: c.ContactID,
-  };
-  return existing
-    ? prisma.client.update({ where: { id: existing.id }, data: { xeroContactId: c.ContactID } })
-    : prisma.client.create({ data });
 }
 
 /** Import selected Xero contacts as local clients (or link if IDs already match). */
@@ -122,10 +72,7 @@ export async function importXeroContacts(formData: FormData) {
 /** Import (or link) a single Xero contact as a local client — used by the inline search picker. */
 export async function importOneXeroContact(contactId: string): Promise<{ id: string; name: string }> {
   await requireUser();
-  const customers = await getCustomers();
-  const c = customers.find((x) => x.ContactID === contactId);
-  if (!c) throw new Error("Xero contact not found");
-  const client = await upsertClientFromXeroContact(c);
+  const client = await importXeroContact(contactId);
   revalidatePath("/clients");
   return { id: client.id, name: client.name };
 }

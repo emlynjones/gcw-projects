@@ -274,3 +274,4 @@ relevant test is unavailable or cannot run, report that clearly.
 - Add comments for business invariants and non-obvious accounting decisions;
   avoid comments that merely narrate the code.
 
+**Whenever a significant amount of change is implemented, you should suggest committing to git by supplying the cmds to add files/folders, and the commit with a reasonably detailed message. also remind to push.**

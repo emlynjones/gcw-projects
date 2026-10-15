@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { getConnection } from "@/lib/xero";
-import { ensureContactForClient } from "@/app/xero-actions";
+import { ensureXeroContactForClient } from "@/modules/accounting/xero/contacts";
 import {
   BILLABLE_SELECT,
   itemPriceMap,
@@ -169,7 +169,7 @@ export async function raiseClientInvoice(clientId: string, formData: FormData): 
 
   let result;
   try {
-    result = await raiseInvoiceFor(client, lines, reference, ensureContactForClient);
+    result = await raiseInvoiceFor(client, lines, reference, ensureXeroContactForClient);
   } catch (e) {
     redirect(`${back}?runError=${encodeURIComponent(e instanceof Error ? e.message : String(e))}`);
   }

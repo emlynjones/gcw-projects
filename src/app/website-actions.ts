@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { matchInvoiceLines, toMatchableLine, type MatchableService } from "@/lib/billing-match";
 import { applyLink, applyLinks } from "@/lib/billing-apply";
-import { syncClientInvoiceLines } from "@/app/xero-sync-actions";
+import { syncClientInvoiceLines } from "@/modules/accounting/xero/invoice-lines";
 import { domainOf } from "@/lib/websites";
 
 async function requireUser() {

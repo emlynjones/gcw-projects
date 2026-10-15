@@ -4,17 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { getContactInvoicesSince, parseXeroDate, getItems, scopeIsCurrent, getConnection } from "@/lib/xero";
-import { extractDomains } from "@/lib/domains";
+import { getItems, scopeIsCurrent, getConnection } from "@/lib/xero";
+import { syncClientInvoiceLines } from "@/modules/accounting/xero/invoice-lines";
 
 async function requireUser() {
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorised");
   return session.user;
 }
-
-/** How far back to pull invoice history — 3 years covers two annual renewals. */
-const HISTORY_YEARS = 3;
 
 /**
  * Clients per run. Xero allows 60 calls/minute and we make 1–2 per client, so a
@@ -83,69 +80,6 @@ export async function syncProgress(): Promise<{ done: number; total: number; inP
   const total = await prisma.client.count({ where: { xeroContactId: { not: null } } });
   const cursor = await readCursor();
   return { done: cursor?.doneClientIds.length ?? 0, total, inProgress: !!cursor };
-}
-
-/**
- * Pull one client's invoice history into the local cache.
- *
- * Shared by the batched Settings scan and the on-demand scan from a website
- * page — the latter matters because the batch job takes several passes to work
- * through the client base, and you shouldn't have to wait for it to reach a
- * client before you can reconcile their invoices.
- *
- * Idempotent: rows are keyed on (xeroInvoiceId, lineIndex) and the update payload
- * deliberately omits `recurringServiceId` and `reviewed`, so re-syncing refreshes
- * the Xero data while leaving human linking decisions intact.
- */
-export async function syncClientInvoiceLines(
-  clientId: string,
-  xeroContactId: string
-): Promise<{ invoices: number; lines: number; domains: string[] }> {
-  const since = new Date();
-  since.setFullYear(since.getFullYear() - HISTORY_YEARS);
-
-  const invoices = await getContactInvoicesSince(xeroContactId, since);
-  const found = new Set<string>();
-  let lines = 0;
-
-  for (const inv of invoices) {
-    const invoiceDate = parseXeroDate(inv.Date) ?? new Date();
-    const items = inv.LineItems ?? [];
-
-    for (let i = 0; i < items.length; i++) {
-      const line = items[i];
-      const description = (line.Description ?? "").trim();
-      if (!description) continue;
-
-      const domains = extractDomains(`${description} ${inv.Reference ?? ""}`);
-      domains.forEach((d) => found.add(d));
-
-      const data = {
-        xeroNumber: inv.InvoiceNumber ?? null,
-        contactId: inv.Contact?.ContactID ?? xeroContactId,
-        clientId,
-        invoiceDate,
-        status: inv.Status,
-        reference: inv.Reference ?? null,
-        description,
-        quantity: line.Quantity ?? 1,
-        unitAmount: line.UnitAmount ?? 0,
-        lineAmount: line.LineAmount ?? (line.Quantity ?? 1) * (line.UnitAmount ?? 0),
-        itemCode: line.ItemCode ?? null,
-        domains: domains.length ? JSON.stringify(domains) : null,
-        syncedAt: new Date(),
-      };
-
-      await prisma.xeroInvoiceLine.upsert({
-        where: { xeroInvoiceId_lineIndex: { xeroInvoiceId: inv.InvoiceID, lineIndex: i } },
-        update: data,
-        create: { xeroInvoiceId: inv.InvoiceID, lineIndex: i, ...data },
-      });
-      lines++;
-    }
-  }
-
-  return { invoices: invoices.length, lines, domains: [...found] };
 }
 
 /**

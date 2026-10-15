@@ -15,7 +15,7 @@ import {
   raiseInvoiceFor,
   type BillableLine,
 } from "@/lib/billing-raise";
-import { ensureContactForClient } from "@/app/xero-actions";
+import { ensureXeroContactForClient } from "@/modules/accounting/xero/contacts";
 
 async function requireUser() {
   const session = await auth();
@@ -132,7 +132,7 @@ export async function raisePeriodInvoice(websiteId: string, formData: FormData):
 
   let result;
   try {
-    result = await raiseInvoiceFor(website.client, lines, reference, ensureContactForClient);
+    result = await raiseInvoiceFor(website.client, lines, reference, ensureXeroContactForClient);
   } catch (e) {
     redirect(`${back}?invoiceError=${encodeURIComponent(e instanceof Error ? e.message : String(e))}`);
   }
@@ -441,7 +441,7 @@ export async function raiseWebsiteInvoice(websiteId: string, formData: FormData)
 
   let result;
   try {
-    result = await raiseInvoiceFor(website.client, lines, reference, ensureContactForClient);
+    result = await raiseInvoiceFor(website.client, lines, reference, ensureXeroContactForClient);
   } catch (e) {
     redirect(`${back}?invoiceError=${encodeURIComponent(e instanceof Error ? e.message : String(e))}`);
   }

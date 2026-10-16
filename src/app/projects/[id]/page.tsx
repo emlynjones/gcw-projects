@@ -1,5 +1,7 @@
 import Link from "next/link";
 import ProjectTasks from "@/app/work/ProjectTasks";
+import ConvertDetailsToTasks from "@/app/work/ConvertDetailsToTasks";
+import { parseTaskLines } from "@/modules/work/domain";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { xeroInvoiceUrl } from "@/lib/xero-links";
@@ -349,16 +351,16 @@ export default async function ProjectPage({
         )}
       </div>
 
-      {/* Ad-hoc: editable details / tasks */}
+      {/* Ad-hoc: free-text job details; tasks live in the Tasks table above */}
       {isAdhoc && (
         <div className="card">
-          <h2>Details / tasks</h2>
+          <h2>Job details</h2>
           <form action={saveDescription.bind(null, project.id)} className="stack">
             <textarea
               name="description"
               rows={5}
               defaultValue={project.description ?? ""}
-              placeholder={"List the tasks, e.g.\n- Fix contact form\n- Update opening hours"}
+              placeholder={"Notes and context for this job. Lines starting with \"-\" can be turned into tasks."}
             />
             <div>
               <button type="submit" className="btn btn-sm">
@@ -366,6 +368,12 @@ export default async function ProjectPage({
               </button>
             </div>
           </form>
+          {parseTaskLines(project.description).length > 0 && !project.archived && (
+            <ConvertDetailsToTasks
+              projectId={project.id}
+              count={parseTaskLines(project.description).length}
+            />
+          )}
         </div>
       )}
 

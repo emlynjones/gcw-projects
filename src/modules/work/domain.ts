@@ -24,13 +24,15 @@ const optionalDate = z
 const hours = z
   .union([z.literal(""), z.coerce.number().finite().min(0).max(10000)])
   .transform((value) => (value === "" ? null : value));
+const taskTitle = z.string().trim().min(1, "Enter a title").max(200);
+const taskAssignee = z.string().transform((value) => value || null);
 export const taskInput = z.object({
   id: z.string().optional(),
   version: z.coerce.number().int().min(0).default(0),
   projectId: z.string().min(1, "Choose a project or ad hoc job"),
-  title: z.string().trim().min(1, "Enter a title").max(200),
+  title: taskTitle,
   description: z.string().trim().max(20000).default(""),
-  assigneeId: z.string().transform((value) => value || null),
+  assigneeId: taskAssignee,
   status: z.enum(STATUSES),
   priority: z.enum(PRIORITIES),
   estimatedHours: hours,
@@ -52,6 +54,31 @@ export const taskInput = z.object({
   isMilestone: z.boolean().default(false),
   dependencyIds: z.array(z.string().min(1)).max(200).default([]),
 });
+
+// Fields editable inline from the compact task table.
+export const taskRowPatch = z
+  .object({
+    title: taskTitle,
+    status: z.enum(STATUSES),
+    assigneeId: taskAssignee,
+    dueDate: optionalDate,
+  })
+  .partial();
+
+// Bullet/numbered/checkbox lines from free-text job details. Prose is ignored
+// so a plain paragraph never turns into tasks by accident.
+export function parseTaskLines(text: string | null | undefined): string[] {
+  const seen = new Set<string>();
+  const titles: string[] = [];
+  for (const line of (text ?? "").split(/\r?\n/)) {
+    const match = line.match(/^\s*(?:[-*\u2022]|\[[ xX]?\]|\d+[.)])\s+(.+)$/);
+    const title = match?.[1].replace(/^\[[ xX]?\]\s*/, "").trim().slice(0, 200);
+    if (!title || seen.has(title.toLowerCase())) continue;
+    seen.add(title.toLowerCase());
+    titles.push(title);
+  }
+  return titles;
+}
 
 export function todayLondon(now = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {

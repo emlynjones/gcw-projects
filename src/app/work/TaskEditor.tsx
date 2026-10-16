@@ -13,19 +13,31 @@ export default function TaskEditor({
   defaultAssigneeId,
   onSaved,
   onCancel,
+  variant = "full",
+  rowValues,
 }: {
   data: WorkData;
   task?: Task;
   projectId?: string;
   defaultAssigneeId?: string;
-  onSaved: () => void;
+  onSaved: (version?: number) => void;
   onCancel?: () => void;
+  // "details" is the expanded panel of the task table: title, status,
+  // assignee and due date are edited inline, so they travel as hidden inputs.
+  variant?: "full" | "details";
+  rowValues?: {
+    title: string;
+    status: string;
+    assigneeId: string;
+    dueDate: string;
+  };
 }) {
+  const compact = variant === "details" && !!task && !!rowValues;
   const [state, action, pending] = useActionState(saveTaskAction, {});
   const [parent, setParent] = useState(task?.projectId ?? projectId ?? "");
   useEffect(() => {
-    if (state.saved) onSaved();
-  }, [state.saved, onSaved]);
+    if (state.saved) onSaved(state.version);
+  }, [state.saved, state.version, onSaved]);
   return (
     <form
       action={action}
@@ -34,56 +46,69 @@ export default function TaskEditor({
     >
       {task && <input type="hidden" name="id" value={task.id} />}
       <input type="hidden" name="version" value={task?.version ?? 0} />
+      {compact && rowValues && (
+        <>
+          <input type="hidden" name="projectId" value={task.projectId} />
+          <input type="hidden" name="title" value={rowValues.title} />
+          <input type="hidden" name="status" value={rowValues.status} />
+          <input type="hidden" name="assigneeId" value={rowValues.assigneeId} />
+          <input type="hidden" name="dueDate" value={rowValues.dueDate} />
+        </>
+      )}
       <div className="work-form-grid">
-        <label>
-          Title
-          <input
-            name="title"
-            required
-            maxLength={200}
-            defaultValue={task?.title}
-            placeholder="What needs doing?"
-          />
-        </label>
-        {task || projectId ? (
-          <input type="hidden" name="projectId" value={parent} />
-        ) : (
-          <label>
-            Project or ad hoc job
-            <select
-              name="projectId"
-              required
-              value={parent}
-              onChange={(event) => setParent(event.target.value)}
-            >
-              <option value="">Choose project or job…</option>
-              {data.projects
-                .filter((p) => !p.archived)
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.title}
-                    {p.type === "ADHOC" ? " · Ad hoc" : ""}
+        {!compact && (
+          <>
+            <label>
+              Title
+              <input
+                name="title"
+                required
+                maxLength={200}
+                defaultValue={task?.title}
+                placeholder="What needs doing?"
+              />
+            </label>
+            {task || projectId ? (
+              <input type="hidden" name="projectId" value={parent} />
+            ) : (
+              <label>
+                Project or ad hoc job
+                <select
+                  name="projectId"
+                  required
+                  value={parent}
+                  onChange={(event) => setParent(event.target.value)}
+                >
+                  <option value="">Choose project or job…</option>
+                  {data.projects
+                    .filter((p) => !p.archived)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.title}
+                        {p.type === "ADHOC" ? " · Ad hoc" : ""}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            )}
+            <label>
+              Assigned person
+              <select
+                name="assigneeId"
+                defaultValue={
+                  task ? (task.assigneeId ?? "") : (defaultAssigneeId ?? "")
+                }
+              >
+                <option value="">Unassigned</option>
+                {data.people.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.name}
                   </option>
                 ))}
-            </select>
-          </label>
+              </select>
+            </label>
+          </>
         )}
-        <label>
-          Assigned person
-          <select
-            name="assigneeId"
-            defaultValue={
-              task ? (task.assigneeId ?? "") : (defaultAssigneeId ?? "")
-            }
-          >
-            <option value="">Unassigned</option>
-            {data.people.map((person) => (
-              <option key={person.id} value={person.id}>
-                {person.name}
-              </option>
-            ))}
-          </select>
-        </label>
         <label>
           Priority
           <select name="priority" defaultValue={task?.priority ?? "NORMAL"}>
@@ -92,28 +117,32 @@ export default function TaskEditor({
             ))}
           </select>
         </label>
-        <label>
-          Due date
-          <input
-            type="date"
-            name="dueDate"
-            defaultValue={task?.dueDate ?? ""}
-          />
-        </label>
+        {!compact && (
+          <label>
+            Due date
+            <input
+              type="date"
+              name="dueDate"
+              defaultValue={task?.dueDate ?? ""}
+            />
+          </label>
+        )}
       </div>
       <details open={task ? true : undefined}>
         <summary>Details, planning and dependencies</summary>
         <div className="work-form-grid mt">
-          <label>
-            Status
-            <select name="status" defaultValue={task?.status ?? "TODO"}>
-              {STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {STATUS_LABELS[status]}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!compact && (
+            <label>
+              Status
+              <select name="status" defaultValue={task?.status ?? "TODO"}>
+                {STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {STATUS_LABELS[status]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
             Estimated hours
             <input

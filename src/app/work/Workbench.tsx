@@ -22,7 +22,7 @@ import TaskEditor from "./TaskEditor";
 import { saveCapacityAction } from "./actions";
 
 type Task = WorkData["tasks"][number];
-type Mode = "mine" | "all" | "planner" | "kanban" | "project";
+type Mode = "mine" | "all" | "planner" | "kanban";
 
 function EditorDialog({
   children,
@@ -89,14 +89,12 @@ export default function Workbench({
   data,
   currentUserId,
   today,
-  projectId,
   mode = "mine",
   initialWeek,
 }: {
   data: WorkData;
   currentUserId: string;
   today: string;
-  projectId?: string;
   mode?: Mode;
   initialWeek?: string;
 }) {
@@ -118,9 +116,7 @@ export default function Workbench({
     router.refresh();
   }, [router]);
   const scoped = data.tasks.filter(
-    (task) =>
-      (!projectId || task.projectId === projectId) &&
-      (mode !== "mine" || task.assigneeId === currentUserId),
+    (task) => mode !== "mine" || task.assigneeId === currentUserId,
   );
   const outstanding = scoped.filter((task) => task.status !== "DONE");
   const overdue = outstanding.filter(
@@ -176,15 +172,10 @@ export default function Workbench({
           {task.priority}
         </span>
       </div>
-      {!projectId && (
-        <Link
-          href={`/projects/${task.projectId}#tasks`}
-          className="muted small"
-        >
-          {taskProject(task)?.title}{" "}
-          {taskProject(task)?.type === "ADHOC" ? "· Ad hoc" : ""}
-        </Link>
-      )}
+      <Link href={`/projects/${task.projectId}#tasks`} className="muted small">
+        {taskProject(task)?.title}{" "}
+        {taskProject(task)?.type === "ADHOC" ? "· Ad hoc" : ""}
+      </Link>
       <p className="small">
         {data.people.find((user) => user.id === task.assigneeId)?.name ??
           "Unassigned"}{" "}
@@ -227,15 +218,13 @@ export default function Workbench({
       <div className="page-head">
         <div>
           <h1>
-            {mode === "project"
-              ? "Tasks & milestones"
-              : mode === "mine"
-                ? "My Work"
-                : mode === "planner"
-                  ? "Weekly Planner"
-                  : mode === "kanban"
-                    ? "Task board"
-                    : "All Work"}
+            {mode === "mine"
+              ? "My Work"
+              : mode === "planner"
+                ? "Weekly Planner"
+                : mode === "kanban"
+                  ? "Task board"
+                  : "All Work"}
           </h1>
           <p className="muted">
             {mode === "mine"
@@ -286,30 +275,6 @@ export default function Workbench({
           completed
         </div>
       </div>
-      {mode === "project" && (
-        <div className="card">
-          <label>
-            Task progress{" "}
-            <progress
-              max={scoped.length || 1}
-              value={scoped.filter((task) => task.status === "DONE").length}
-            />
-          </label>
-          <p>
-            Milestones:{" "}
-            {
-              scoped.filter(
-                (task) => task.isMilestone && task.status === "DONE",
-              ).length
-            }{" "}
-            / {scoped.filter((task) => task.isMilestone).length} complete
-          </p>
-          <p className="muted small">
-            Progress is based on task count. Project stage and billing are
-            managed separately.
-          </p>
-        </div>
-      )}
       {notice && <p role="status">{notice}</p>}
       {selected && (
         <EditorDialog close={() => setEditing(null)}>
@@ -323,18 +288,15 @@ export default function Workbench({
           />
         </EditorDialog>
       )}
-      {!data.projects.find((project) => project.id === projectId)?.archived && (
-        <div className="card">
-          <h2>Quick add</h2>
-          <TaskEditor
-            key={captureKey}
-            data={data}
-            projectId={projectId}
-            defaultAssigneeId={mode === "mine" ? currentUserId : undefined}
-            onSaved={saved}
-          />
-        </div>
-      )}
+      <div className="card">
+        <h2>Quick add</h2>
+        <TaskEditor
+          key={captureKey}
+          data={data}
+          defaultAssigneeId={mode === "mine" ? currentUserId : undefined}
+          onSaved={saved}
+        />
+      </div>
       <div className="work-filters">
         <label>
           Search tasks
@@ -362,22 +324,20 @@ export default function Workbench({
             </select>
           </label>
         )}
-        {!projectId && (
-          <label>
-            Project / job
-            <select
-              value={parent}
-              onChange={(event) => setParent(event.target.value)}
-            >
-              <option value="">All projects & jobs</option>
-              {data.projects.map((project) => (
-                <option value={project.id} key={project.id}>
-                  {project.title}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <label>
+          Project / job
+          <select
+            value={parent}
+            onChange={(event) => setParent(event.target.value)}
+          >
+            <option value="">All projects & jobs</option>
+            {data.projects.map((project) => (
+              <option value={project.id} key={project.id}>
+                {project.title}
+              </option>
+            ))}
+          </select>
+        </label>
         <label>
           Status
           <select

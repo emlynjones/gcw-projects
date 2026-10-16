@@ -66,6 +66,9 @@ zero means unavailable). Full estimated effort counts against the planned week,
 including completed tasks; it is not time tracking or daily scheduling.
 Authentication belongs to the server adapters; all work mutations use the shared
 application operations, which validate parent and assignee relationships.
+A task may be deleted only when no other task depends on it. Converting an
+ad-hoc job's free-text details into tasks is an explicit, retry-safe action
+that skips titles already on the job and leaves the details text unchanged.
 
 ### Catalogue
 

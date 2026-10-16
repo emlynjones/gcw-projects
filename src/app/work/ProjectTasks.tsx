@@ -1,21 +1,21 @@
 import { getWorkData } from "@/modules/work/application";
 import { requireWorkUser } from "@/modules/work/access";
 import { todayLondon } from "@/modules/work/domain";
-import Workbench from "./Workbench";
+import TaskTable from "./TaskTable";
 
 export default async function ProjectTasks({
   projectId,
 }: {
   projectId: string;
 }) {
-  const user = await requireWorkUser();
+  await requireWorkUser();
+  const data = await getWorkData(projectId);
   return (
-    <Workbench
-      data={await getWorkData(projectId)}
-      currentUserId={user.id}
-      today={todayLondon()}
-      mode="project"
+    <TaskTable
+      data={data}
       projectId={projectId}
+      today={todayLondon()}
+      archived={!!data.projects.find((p) => p.id === projectId)?.archived}
     />
   );
 }

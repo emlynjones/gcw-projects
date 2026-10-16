@@ -85,7 +85,7 @@ test("capture, plan and complete project tasks and milestones", async ({
     .getByRole("link", { name: "Acme Website" })
     .click();
   await expect(
-    page.locator("#tasks").getByText("Milestones: 1 / 1 complete"),
+    page.locator("#tasks").getByText("Milestones 1/1"),
   ).toBeVisible();
 });
 

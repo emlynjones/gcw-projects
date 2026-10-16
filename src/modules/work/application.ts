@@ -1,5 +1,12 @@
 import { prisma } from "../../lib/prisma";
-import { assertAcyclic, dateOnly, monday, taskInput } from "./domain";
+import {
+  assertAcyclic,
+  dateOnly,
+  monday,
+  parseTaskLines,
+  taskInput,
+  taskRowPatch,
+} from "./domain";
 import { z } from "zod";
 
 export async function saveTask(input: unknown) {
@@ -70,7 +77,109 @@ export async function saveTask(input: unknown) {
     }
     for (const prerequisiteId of new Set(dependencyIds))
       await tx.taskDependency.create({ data: { taskId, prerequisiteId } });
-    return { id: taskId, projectId: fields.projectId };
+    return {
+      id: taskId,
+      projectId: fields.projectId,
+      version: id ? version + 1 : 0,
+    };
+  });
+}
+
+// Inline edits from the task table go through saveTask so the assignee,
+// version, prerequisite and reopen rules cannot drift from the full editor.
+export async function updateTaskRow(input: {
+  id: string;
+  version: number;
+  patch: unknown;
+}) {
+  const patch = taskRowPatch.parse(input.patch);
+  const task = await prisma.task.findUnique({
+    where: { id: input.id },
+    include: { dependencies: true },
+  });
+  if (!task) throw new Error("This task no longer exists. Reload the page.");
+  return saveTask({
+    projectId: task.projectId,
+    description: task.description,
+    title: patch.title ?? task.title,
+    status: patch.status ?? task.status,
+    assigneeId:
+      patch.assigneeId !== undefined
+        ? (patch.assigneeId ?? "")
+        : (task.assigneeId ?? ""),
+    dueDate:
+      patch.dueDate !== undefined ? (patch.dueDate ?? "") : (task.dueDate ?? ""),
+    priority: task.priority,
+    estimatedHours: task.estimatedHours ?? "",
+    plannedDate: task.plannedDate ?? "",
+    completionCriteria: task.completionCriteria,
+    sopUrl: task.sopUrl ?? "",
+    isMilestone: task.isMilestone,
+    dependencyIds: task.dependencies.map((edge) => edge.prerequisiteId),
+    id: task.id,
+    version: input.version,
+  });
+}
+
+export async function deleteTask(input: {
+  id: string;
+  projectId: string;
+  version: number;
+}) {
+  return prisma.$transaction(async (tx) => {
+    const task = await tx.task.findUnique({
+      where: { id: input.id },
+      include: { project: { select: { archived: true } } },
+    });
+    if (!task || task.projectId !== input.projectId)
+      throw new Error("Task does not belong to this project.");
+    if (task.project.archived)
+      throw new Error("Archived projects cannot be changed.");
+    const dependents = await tx.taskDependency.findMany({
+      where: { prerequisiteId: input.id },
+      include: { task: { select: { title: true } } },
+    });
+    if (dependents.length)
+      throw new Error(
+        `Remove this task from the dependencies of: ${dependents
+          .map((edge) => edge.task.title)
+          .join(", ")}.`,
+      );
+    const removed = await tx.task.deleteMany({
+      where: { id: input.id, version: input.version },
+    });
+    if (!removed.count)
+      throw new Error(
+        "Someone changed this task. Reload the page before deleting it.",
+      );
+    return { projectId: task.projectId };
+  });
+}
+
+// Explicit, retry-safe conversion: the description is read server-side and
+// titles already present on the project are skipped. The description itself
+// is left untouched for the user to tidy.
+export async function createTasksFromDetails(projectId: string) {
+  return prisma.$transaction(async (tx) => {
+    const project = await tx.project.findUnique({
+      where: { id: projectId },
+      select: { description: true, archived: true },
+    });
+    if (!project || project.archived)
+      throw new Error("Choose an existing, unarchived project or job.");
+    const existing = new Set(
+      (
+        await tx.task.findMany({
+          where: { projectId },
+          select: { title: true },
+        })
+      ).map((task) => task.title.trim().toLowerCase()),
+    );
+    const titles = parseTaskLines(project.description);
+    const fresh = titles.filter((title) => !existing.has(title.toLowerCase()));
+    for (const title of fresh)
+      await tx.task.create({ data: { projectId, title } });
+    return { created: fresh.length, skipped: titles.length - fresh.length };
   });
 }
 

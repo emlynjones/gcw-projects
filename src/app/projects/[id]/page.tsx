@@ -1,6 +1,7 @@
 import Link from "next/link";
 import ProjectTasks from "@/app/work/ProjectTasks";
 import ConvertDetailsToTasks from "@/app/work/ConvertDetailsToTasks";
+import GenerateTasks from "@/app/work/GenerateTasks";
 import { parseTaskLines } from "@/modules/work/domain";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -360,7 +361,7 @@ export default async function ProjectPage({
               name="description"
               rows={5}
               defaultValue={project.description ?? ""}
-              placeholder={"Notes and context for this job. Lines starting with \"-\" can be turned into tasks."}
+              placeholder="Notes and context for this job. Save the details, then generate tasks."
             />
             <div>
               <button type="submit" className="btn btn-sm">
@@ -368,7 +369,10 @@ export default async function ProjectPage({
               </button>
             </div>
           </form>
-          {parseTaskLines(project.description).length > 0 && !project.archived && (
+          {ai.configured && project.description?.trim() && !project.archived && (
+            <GenerateTasks projectId={project.id} />
+          )}
+          {!ai.configured && parseTaskLines(project.description).length > 0 && !project.archived && (
             <ConvertDetailsToTasks
               projectId={project.id}
               count={parseTaskLines(project.description).length}

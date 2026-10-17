@@ -2,12 +2,15 @@ import { prisma } from "../../lib/prisma";
 import {
   assertAcyclic,
   dateOnly,
+  generatedTaskTitles,
   monday,
+  parseGeneratedTaskTitles,
   parseTaskLines,
   taskInput,
   taskRowPatch,
 } from "./domain";
 import { z } from "zod";
+import { aiComplete } from "../../lib/ai";
 
 export async function saveTask(input: unknown) {
   const { id, version, dependencyIds, ...fields } = taskInput.parse(input);
@@ -180,6 +183,76 @@ export async function createTasksFromDetails(projectId: string) {
     for (const title of fresh)
       await tx.task.create({ data: { projectId, title } });
     return { created: fresh.length, skipped: titles.length - fresh.length };
+  });
+}
+
+export async function suggestTasksFromDetails(projectId: string) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: {
+      title: true,
+      description: true,
+      archived: true,
+      tasks: { select: { title: true } },
+    },
+  });
+  if (!project || project.archived)
+    throw new Error("Choose an existing, unarchived project or job.");
+  if (!project.description?.trim())
+    throw new Error("Add and save some job details before generating tasks.");
+
+  const response = await aiComplete(
+    `Turn job details into a conservative task list for a small agency team.
+Return only a JSON array of task-title strings. Use 1-6 tasks unless the details clearly require more, with an absolute maximum of 12. Prefer fewer useful, independently completable tasks. Do not invent deliverables, meetings, approvals, testing, deployment, documentation, or administrative work that the details do not imply. Do not repeat existing tasks. Titles must be concise, specific, imperative, and no longer than 200 characters.`,
+    JSON.stringify({
+      jobTitle: project.title,
+      jobDetails: project.description,
+      existingTasks: project.tasks.map((task) => task.title),
+    }),
+    700,
+  );
+  const existing = new Set(
+    project.tasks.map((task) => task.title.trim().toLowerCase()),
+  );
+  let generated: string[];
+  try {
+    generated = parseGeneratedTaskTitles(response);
+  } catch {
+    throw new Error("AI returned an unreadable task list. Please try again.");
+  }
+  const suggestions = generated.filter(
+    (title) => !existing.has(title.toLowerCase()),
+  );
+  if (!suggestions.length)
+    throw new Error("AI did not find any new tasks to suggest.");
+  return suggestions;
+}
+
+// Suggestions are untrusted input when they return from the review UI. Validate
+// them again, then perform the existing-title check in the write transaction.
+export async function createReviewedTasks(projectId: string, titles: unknown) {
+  const reviewed = generatedTaskTitles.parse(titles);
+  return prisma.$transaction(async (tx) => {
+    const project = await tx.project.findUnique({
+      where: { id: projectId },
+      select: { archived: true },
+    });
+    if (!project || project.archived)
+      throw new Error("Choose an existing, unarchived project or job.");
+    const existing = new Set(
+      (
+        await tx.task.findMany({
+          where: { projectId },
+          select: { title: true },
+        })
+      ).map((task) => task.title.trim().toLowerCase()),
+    );
+    const fresh = reviewed.filter(
+      (title) => !existing.has(title.toLowerCase()),
+    );
+    for (const title of fresh)
+      await tx.task.create({ data: { projectId, title } });
+    return { created: fresh.length, skipped: reviewed.length - fresh.length };
   });
 }
 

@@ -3,15 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import {
+  createReviewedTasks,
   createTasksFromDetails,
   deleteTask,
   saveCapacity,
   saveTask,
+  suggestTasksFromDetails,
   updateTaskRow,
 } from "@/modules/work/application";
 import { requireWorkUser } from "@/modules/work/access";
 
 export type WorkResult = { error?: string; saved?: string; version?: number };
+export type TaskSuggestionResult = { error?: string; suggestions?: string[] };
 const message = (error: unknown) =>
   error instanceof ZodError
     ? error.issues.map((issue) => issue.message).join("; ")
@@ -125,6 +128,35 @@ export async function convertDetailsToTasksAction(
   try {
     await requireWorkUser();
     const { created, skipped } = await createTasksFromDetails(projectId);
+    refresh(projectId);
+    return {
+      saved: `Created ${created} task${created === 1 ? "" : "s"}${
+        skipped ? `, skipped ${skipped} already listed` : ""
+      }`,
+    };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function suggestTasksFromDetailsAction(
+  projectId: string,
+): Promise<TaskSuggestionResult> {
+  try {
+    await requireWorkUser();
+    return { suggestions: await suggestTasksFromDetails(projectId) };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
+
+export async function createReviewedTasksAction(
+  projectId: string,
+  titles: string[],
+): Promise<WorkResult> {
+  try {
+    await requireWorkUser();
+    const { created, skipped } = await createReviewedTasks(projectId, titles);
     refresh(projectId);
     return {
       saved: `Created ${created} task${created === 1 ? "" : "s"}${

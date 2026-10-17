@@ -25,6 +25,19 @@ const hours = z
   .union([z.literal(""), z.coerce.number().finite().min(0).max(10000)])
   .transform((value) => (value === "" ? null : value));
 const taskTitle = z.string().trim().min(1, "Enter a title").max(200);
+export const generatedTaskTitles = z
+  .array(taskTitle)
+  .min(1, "Keep at least one task")
+  .max(12, "Keep the task list to 12 items or fewer")
+  .transform((titles) => {
+    const seen = new Set<string>();
+    return titles.filter((title) => {
+      const key = title.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  });
 const taskAssignee = z.string().transform((value) => value || null);
 export const taskInput = z.object({
   id: z.string().optional(),
@@ -78,6 +91,16 @@ export function parseTaskLines(text: string | null | undefined): string[] {
     titles.push(title);
   }
   return titles;
+}
+
+// Models occasionally wrap JSON in a Markdown fence. Accept only a JSON array
+// after removing that wrapper so prose or invented fields cannot become tasks.
+export function parseGeneratedTaskTitles(text: string): string[] {
+  const unwrapped = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+  return generatedTaskTitles.parse(JSON.parse(unwrapped));
 }
 
 export function todayLondon(now = new Date()): string {

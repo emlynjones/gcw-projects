@@ -1407,3 +1407,14 @@ table.compact td {
 .task-add .task-add-title { flex: 1 1 220px; width: auto; border-color: var(--border); background: #fff; }
 .task-add .task-input { border-color: var(--border); background: #fff; }
 .task-add-error { flex-basis: 100%; margin: 0; }
+/* Process templates share the work task engine and form controls. */
+.process-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.process-item { border: 1px solid var(--border, #ddd); border-radius: 8px; padding: 14px; }
+.process-check { display: flex; align-items: center; gap: 8px; }
+.process-check input { width: auto; }
+.process-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.process-field-review { border-top: 1px solid var(--border, #ddd); padding-top: 12px; }
+.process-field-review dl { display: grid; grid-template-columns: minmax(100px, 140px) 1fr; gap: 6px 12px; }
+.process-field-review dd { margin: 0; }
+.process-update summary { margin-top: 10px; }
+.task-process-origin { margin-left: 6px; }

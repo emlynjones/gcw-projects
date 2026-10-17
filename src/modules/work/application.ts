@@ -10,7 +10,6 @@ import {
   taskRowPatch,
 } from "./domain";
 import { z } from "zod";
-import { aiComplete } from "../../lib/ai";
 
 export async function saveTask(input: unknown) {
   const { id, version, dependencyIds, ...fields } = taskInput.parse(input);
@@ -187,6 +186,7 @@ export async function createTasksFromDetails(projectId: string) {
 }
 
 export async function suggestTasksFromDetails(projectId: string) {
+  const { aiComplete } = await import("../../lib/ai");
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: {
@@ -289,7 +289,16 @@ export async function getWorkData(projectId?: string) {
       where: {
         ...(projectId ? { projectId } : { project: { archived: false } }),
       },
-      include: { dependencies: true },
+      include: {
+        dependencies: true,
+        processItem: {
+          include: {
+            application: {
+              include: { revision: { select: { name: true, number: true } } },
+            },
+          },
+        },
+      },
       orderBy: { createdAt: "asc" },
     }),
     prisma.project.findMany({
@@ -306,8 +315,12 @@ export async function getWorkData(projectId?: string) {
   ]);
   return {
     tasks: tasks.map(
-      ({ createdAt, updatedAt, completedAt, dependencies, ...task }) => ({
+      ({ createdAt, updatedAt, completedAt, dependencies, processItem, ...task }) => ({
         ...task,
+        processOrigin: processItem ? {
+          name: processItem.application.revision.name,
+          number: processItem.application.revision.number,
+        } : null,
         dependencyIds: dependencies.map((edge) => edge.prerequisiteId),
       }),
     ),

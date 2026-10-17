@@ -8,7 +8,7 @@ import type { WorkData } from "@/modules/work/application";
 type Task = WorkData["tasks"][number];
 export default function TaskEditor({
   data,
-  task,
+  task: incomingTask,
   projectId,
   defaultAssigneeId,
   onSaved,
@@ -32,15 +32,28 @@ export default function TaskEditor({
     dueDate: string;
   };
 }) {
-  const compact = variant === "details" && !!task && !!rowValues;
   const [state, action, pending] = useActionState(saveTaskAction, {});
+  const [task, setTask] = useState(incomingTask);
+  const [dirty, setDirty] = useState(false);
+  // Refresh untouched inputs after a template update. Once editing starts,
+  // retain the original version so a concurrent change is rejected on save.
+  // Keep the action hook mounted so its save acknowledgement can close the editor.
+  if (
+    !dirty && !pending &&
+    (incomingTask?.id !== task?.id || incomingTask?.version !== task?.version)
+  ) {
+    setTask(incomingTask);
+  }
+  const compact = variant === "details" && !!task && !!rowValues;
   const [parent, setParent] = useState(task?.projectId ?? projectId ?? "");
   useEffect(() => {
     if (state.saved) onSaved(state.version);
   }, [state.saved, state.version, onSaved]);
   return (
     <form
+      key={`${task?.id ?? "new"}:${task?.version ?? 0}`}
       action={action}
+      onChange={() => setDirty(true)}
       className="stack work-editor"
       aria-label={task ? "Edit task" : "Quick add task"}
     >

@@ -52,8 +52,13 @@ model Project {
   files             ProjectFile[]
   services          ProjectService[]
   tasks             Task[]
+  workTypeId        String?
+  workType          WorkType? @relation(fields: [workTypeId], references: [id], onDelete: SetNull)
+  processApplications ProcessApplication[]
+  processDismissals ProcessDismissal[]
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
+  @@index([workTypeId])
 }
 
 // Repeatable dev/staging URLs for a project; one may be marked approved.
@@ -190,6 +195,8 @@ model User {
   createdAt    DateTime @default(now())
   assignedTasks Task[]
   workCapacity StaffWeekCapacity[]
+  processRevisions ProcessRevision[]
+  processChanges ProcessChange[]
 }
 
 // Work management owns tasks; both PROJECT and ADHOC use Project as parent.
@@ -214,6 +221,7 @@ model Task {
   version Int @default(0)
   dependencies TaskDependency[] @relation("Dependent")
   dependents TaskDependency[] @relation("Prerequisite")
+  processItem AppliedProcessItem?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -237,6 +245,149 @@ model StaffWeekCapacity {
   weekStart String // Monday, YYYY-MM-DD; no default capacity is assumed.
   hours Float
   @@id([userId, weekStart])
+}
+
+// Process library belongs to work management. Published revisions are immutable.
+model WorkType {
+  id String @id @default(cuid())
+  name String @unique
+  archived Boolean @default(false)
+  projects Project[]
+  rules ProcessRule[]
+}
+
+model ProcessTemplate {
+  id String @id @default(cuid())
+  archived Boolean @default(false)
+  editVersion Int @default(0)
+  revisions ProcessRevision[]
+  items ProcessItem[]
+  applications ProcessApplication[]
+  dismissals ProcessDismissal[]
+  createdAt DateTime @default(now())
+}
+
+model ProcessRevision {
+  id String @id @default(cuid())
+  templateId String
+  template ProcessTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  number Int
+  name String
+  description String @default("")
+  changeSummary String @default("")
+  publishedAt DateTime?
+  authorId String
+  author User @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  items ProcessItemRevision[]
+  rules ProcessRule[]
+  applications ProcessApplication[]
+  changes ProcessChange[]
+  createdAt DateTime @default(now())
+  @@unique([templateId, number])
+}
+
+model ProcessItem {
+  id String @id
+  templateId String
+  template ProcessTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  revisions ProcessItemRevision[]
+  prerequisites ProcessItemDependency[]
+  applications AppliedProcessItem[]
+  @@index([templateId])
+}
+
+model ProcessItemRevision {
+  id String @id @default(cuid())
+  revisionId String
+  revision ProcessRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  itemId String
+  item ProcessItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  position Int
+  title String
+  description String @default("")
+  completionCriteria String @default("")
+  sopUrl String?
+  priority String @default("NORMAL")
+  estimatedHours Float?
+  isMilestone Boolean @default(false)
+  dependencies ProcessItemDependency[]
+  @@unique([revisionId, itemId])
+  @@index([itemId])
+}
+
+model ProcessItemDependency {
+  itemRevisionId String
+  itemRevision ProcessItemRevision @relation(fields: [itemRevisionId], references: [id], onDelete: Cascade)
+  prerequisiteId String
+  prerequisite ProcessItem @relation(fields: [prerequisiteId], references: [id], onDelete: Restrict)
+  @@id([itemRevisionId, prerequisiteId])
+}
+
+model ProcessRule {
+  id String @id @default(cuid())
+  revisionId String
+  revision ProcessRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  projectType String?
+  stage String?
+  workTypeId String?
+  workType WorkType? @relation(fields: [workTypeId], references: [id], onDelete: Restrict)
+  @@index([revisionId])
+  @@index([workTypeId])
+}
+
+model ProcessApplication {
+  id String @id @default(cuid())
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  templateId String
+  template ProcessTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  revisionId String
+  revision ProcessRevision @relation(fields: [revisionId], references: [id], onDelete: Restrict)
+  // "primary" for normal application; a caller-held UUID for an explicit copy.
+  occurrence String @default("primary")
+  version Int @default(0)
+  items AppliedProcessItem[]
+  changes ProcessChange[]
+  createdAt DateTime @default(now())
+  @@unique([projectId, templateId, occurrence])
+  @@index([templateId])
+}
+
+model AppliedProcessItem {
+  id String @id @default(cuid())
+  applicationId String
+  application ProcessApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  itemId String
+  item ProcessItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  taskId String? @unique
+  // Keep a tombstone when a project task is explicitly deleted.
+  task Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  // Typed, validated field snapshot; individual reviewed fields advance independently.
+  baseline Json
+  @@unique([applicationId, itemId])
+  @@index([itemId])
+}
+
+model ProcessDismissal {
+  projectId String
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  templateId String
+  template ProcessTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  @@id([projectId, templateId])
+}
+
+model ProcessChange {
+  id String @id @default(cuid())
+  applicationId String
+  application ProcessApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  revisionId String
+  revision ProcessRevision @relation(fields: [revisionId], references: [id], onDelete: Restrict)
+  actorId String
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  // Validated record of apply/update choices for operator history.
+  decisions Json
+  createdAt DateTime @default(now())
+  @@index([applicationId, createdAt])
 }
 
 // A website we look after — the hub that domains/hosting/O365 hang off.

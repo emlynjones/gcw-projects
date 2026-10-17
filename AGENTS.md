@@ -70,6 +70,25 @@ A task may be deleted only when no other task depends on it. Converting an
 ad-hoc job's free-text details into tasks is an explicit, retry-safe action
 that skips titles already on the job and leaves the details text unchanged.
 
+Work also owns the Process Library: `WorkType`, `ProcessTemplate`, immutable
+published `ProcessRevision` records, stable `ProcessItem` identities and their
+revision content/dependencies, `ProcessRule`, `ProcessApplication`,
+`AppliedProcessItem`, `ProcessDismissal` and `ProcessChange`. Projects own their
+optional work-type assignment; work validates and updates it through its shared
+operation. Stage/work-type rules produce read-time suggestions, never writes.
+Dismissals persist across stage re-entry. Applying a template is an explicit,
+reviewed, transactional snapshot into the same Task engine for PROJECT and ADHOC.
+Application identity is project + template + occurrence (`primary` or an explicit
+copy's retry key), never names or titles. Deleting an applied task preserves its
+source-item tombstone. Template updates require per-field review, version checks,
+dependency validation and an audit event; assignments, scheduling and task status
+are not template-managed. Applied item baseline JSON is a validated ProcessFields
+snapshot: only reviewed fields advance, including explicit keep-project choices.
+Published revisions cannot be edited or deleted by application operations;
+archive groups to retain provenance. SOP instructions/acceptance criteria are
+snapshotted; external SOP links reference documents whose external content is not
+versioned by this app.
+
 ### Catalogue
 
 Owns `Service` and product/service defaults such as descriptions, prices,

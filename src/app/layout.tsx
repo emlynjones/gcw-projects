@@ -37,6 +37,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     <Link href="/work?view=all">All Work</Link>
                     <Link href="/work?view=planner">Weekly Planner</Link>
                     <Link href="/work?view=kanban">Kanban</Link>
+                    <Link href="/work/processes">Process Library</Link>
                     <Link href="/projects?type=PROJECT">Projects</Link>
                     <Link href="/projects?type=ADHOC">Ad-hoc</Link>
                   </div>

@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+echo "Applying process library upgrade…"
+node scripts/upgrade-process-library.mjs
+
 echo "Syncing database schema…"
 ./node_modules/.bin/prisma db push --skip-generate --accept-data-loss --schema ./prisma/schema.prisma
 

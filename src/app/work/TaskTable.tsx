@@ -169,6 +169,7 @@ function TaskRow({
               </span>
             )}
           </div>
+          {task.processOrigin && <div className="task-process-origin muted small" title={`Applied from template version ${task.processOrigin.number}`}>{task.processOrigin.name} · v{task.processOrigin.number}</div>}
         </td>
         <td>
           <select

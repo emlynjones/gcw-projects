@@ -80,6 +80,14 @@ What it does:
 
 Services price list is seeded from the GCW catalogue on container start (`prisma/seed-services.js`, create-only — edits made in the UI are never overwritten). Manage at Settings → Services.
 
+## Process Library
+
+Open **Work → Process Library** to create reusable task groups, publish versions,
+and define stage/work-type suggestions. Both projects and ad-hoc jobs can review
+and apply templates, customise their tasks, and selectively accept later template
+updates. See [the Process Library guide](docs/process-library.md) for usage and
+the additive database upgrade performed at container startup.
+
 ## Auth model
 
 - **Microsoft Entra ID** — GCW staff SSO; users auto-provisioned as `staff`.

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import GlobalSearch from "@/app/components/GlobalSearch";
+import AppNav from "@/app/components/AppNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -23,40 +24,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body>
         {session?.user && (
-          <header className="topbar">
-            <div className="topbar-inner">
+          <aside className="sidebar">
+            <div className="sidebar-inner">
               <Link href="/" className="brand">
-                GCW <span>Projects</span>
+                GCW Projects
               </Link>
-              <nav>
-                <Link href="/">Dashboard</Link>
-                <div className="nav-group">
-                  <Link href="/projects">Work</Link>
-                  <div className="nav-menu">
-                    <Link href="/work">My Work</Link>
-                    <Link href="/work?view=all">All Work</Link>
-                    <Link href="/work?view=planner">Weekly Planner</Link>
-                    <Link href="/work?view=kanban">Kanban</Link>
-                    <Link href="/work/processes">Process Library</Link>
-                    <Link href="/projects?type=PROJECT">Projects</Link>
-                    <Link href="/projects?type=ADHOC">Ad-hoc</Link>
-                  </div>
-                </div>
-                <Link href="/clients">Clients</Link>
-                <Link href="/websites">Websites</Link>
-                <div className="nav-group">
-                  <Link href="/recurring/dashboard">Recurring</Link>
-                  <div className="nav-menu">
-                    <Link href="/recurring/dashboard">Overview</Link>
-                    <Link href="/recurring/microsoft-365">Microsoft 365</Link>
-                    <Link href="/recurring/careplans">Care plans</Link>
-                    <Link href="/recurring">All services</Link>
-                  </div>
-                </div>
-                <Link href="/reports">Reports</Link>
-                <Link href="/settings">Settings</Link>
-              </nav>
-              <GlobalSearch />
+              <AppNav />
+              <div className="sidebar-footer">
+                <GlobalSearch />
+                <Link href="/settings" className="sidebar-settings">Settings</Link>
               <div className="topbar-user">
                 <span>{session.user.name ?? session.user.email}</span>
                 <form
@@ -70,10 +46,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   </button>
                 </form>
               </div>
+              </div>
             </div>
-          </header>
+          </aside>
         )}
-        <main className="container">{children}</main>
+        <main className={`container${session?.user ? " app-content" : ""}`}>{children}</main>
       </body>
     </html>
   );

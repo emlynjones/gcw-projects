@@ -61,7 +61,7 @@ export default async function Dashboard() {
   const finishedCount = withLife.filter((p) => p.stage !== LOST && isFinished(p)).length;
 
   return (
-    <>
+    <div className="dashboard-page">
       <div className="page-head">
         <h1>Dashboard</h1>
         <div style={{ display: "flex", gap: 8 }}>
@@ -100,7 +100,7 @@ export default async function Dashboard() {
       </div>
 
       {toInvoice.length > 0 && (
-        <div className="card">
+        <div className="card dashboard-alert">
           <p style={{ margin: 0 }}>
             <strong>
               {toInvoice.length} ad-hoc job{toInvoice.length === 1 ? "" : "s"} done and not yet
@@ -113,7 +113,7 @@ export default async function Dashboard() {
       )}
 
       {/* Ad-hoc still to do, most pressing first */}
-      <div className="card">
+      <div className="card dashboard-adhoc">
         <div className="page-head" style={{ marginBottom: 10 }}>
           <h2 style={{ margin: 0 }}>Ad-hoc work</h2>
           <Link href="/projects?type=ADHOC" className="small">
@@ -157,7 +157,7 @@ export default async function Dashboard() {
       </div>
 
       {/* Projects by stage, nearest delivery first */}
-      <div className="page-head" style={{ marginBottom: 10 }}>
+      <div className="page-head dashboard-projects-head" style={{ marginBottom: 10 }}>
         <h2 style={{ margin: 0 }}>Projects by stage</h2>
         <Link href="/projects" className="small">
           all projects →
@@ -175,7 +175,7 @@ export default async function Dashboard() {
         </p>
       )}
       {groups.map(({ stage, items }) => (
-        <div key={stage} className="stage-group">
+        <div key={stage} className="stage-group dashboard-stage-group">
           <h3>
             <span className="badge badge-stage">{stageLabel(stage)}</span>
             <span className="muted small"> {items.length}</span>
@@ -220,6 +220,6 @@ export default async function Dashboard() {
           </span>
         ))}
       </p>
-    </>
+    </div>
   );
 }

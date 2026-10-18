@@ -29,7 +29,7 @@ export default async function BillingRunPage({
   const [run, conn] = await Promise.all([billingRun(), getConnection()]);
 
   return (
-    <>
+    <div className="billing-run-page">
       <div className="page-head">
         <h1>Billing run</h1>
         <div style={{ display: "flex", gap: 8 }}>
@@ -109,6 +109,6 @@ export default async function BillingRunPage({
       </div>
 
       <BillingRun groups={run.groups} canRaise={!!conn} />
-    </>
+    </div>
   );
 }

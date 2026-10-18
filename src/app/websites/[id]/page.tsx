@@ -175,9 +175,26 @@ export default async function WebsitePage({
 
   const active = website.services.filter((s) => s.active);
   const { sell: totalSell, cost: totalCost } = totals(active);
-  const unbilled = active.filter(
-    (s) => billingStateOf(s, s.billings, new Date(), s._count.invoiceLines) === "UNBILLED"
+  const carePlan = active.find((s) => s.kind === "CAREPLAN");
+  const missingPrices = active.filter((s) => s.sellPrice <= 0);
+  const reviewServices = active.filter(
+    (s) => billingStateOf(s, s.billings, new Date(), s._count.invoiceLines) === "REVIEW"
   );
+  // An invoice anniversary far from the supplier renewal is evidence that the
+  // client billing schedule may differ. Surface that ambiguity before another
+  // period is charged; the existing model deliberately keeps the confirmed
+  // billing periods separate from the supplier renewal anchor.
+  const anniversaryMismatches = active.filter((service) => {
+    if (!service.renewalDate) return false;
+    const latest = linkedLines.find((line) => line.recurringServiceId === service.id)?.invoiceDate;
+    if (!latest) return false;
+    const renewalDay = Date.UTC(2000, service.renewalDate.getUTCMonth(), service.renewalDate.getUTCDate());
+    const invoiceDay = Date.UTC(2000, latest.getUTCMonth(), latest.getUTCDate());
+    const days = Math.abs(renewalDay - invoiceDay) / 86_400_000;
+    return Math.min(days, 366 - days) > 45;
+  });
+  const attentionCount = missingPrices.length + reviewServices.length + anniversaryMismatches.length + proposals.length;
+  const financialsConfirmed = missingPrices.length === 0;
 
   const looseServices: LooseService[] = loose.map((s) => ({
     id: s.id,
@@ -208,19 +225,27 @@ export default async function WebsitePage({
   allBillings.sort((a, b) => b.periodStart.getTime() - a.periodStart.getTime());
 
   return (
-    <>
-      <div className="page-head">
+    <div className="website-detail">
+      <div className="page-head website-identity">
         <div>
+          <div className="breadcrumb"><Link href="/websites">Websites</Link> / {website.name}</div>
           <h1>{website.name}</h1>
           {website.url && (
-            <a href={website.url} target="_blank" rel="noreferrer" className="muted small">
-              {website.url}
+            <a href={website.url} target="_blank" rel="noreferrer" className="small">
+              Website address ↗
             </a>
           )}
+          <div className="muted small">
+            Client: {website.clientId ? <Link href={`/clients/${website.clientId}`}>{website.client?.name} →</Link> : "Not assigned"}
+          </div>
         </div>
-        <Link href="/websites" className="btn btn-secondary">
-          ← All websites
-        </Link>
+        <div className="action-row">
+          {attentionCount > 0 && <a href="#billing" className="btn btn-secondary">Review billing ({attentionCount})</a>}
+          <a href="#add-service" className="btn">+ Add service</a>
+          <details className="admin-menu"><summary className="btn btn-secondary" aria-label="Website actions">•••</summary>
+            <div><a href="#advanced">Edit website / client</a><Link href="/websites">All websites</Link></div>
+          </details>
+        </div>
       </div>
 
       {realloc && (
@@ -265,7 +290,28 @@ export default async function WebsitePage({
         </div>
       )}
 
-      <div className="card">
+      <div className="stats website-summary">
+        <div className="stat">
+          <div className="label">Care plan</div>
+          <div className="value summary-text">{carePlan ? carePlan.label : "No care plan linked"}</div>
+          {carePlan && <div className="muted small">{gbp(carePlan.sellPrice)}/{carePlan.termMonths === 1 ? "month" : `${carePlan.termMonths} months`} · Active</div>}
+        </div>
+        <div className="stat"><div className="label">Annual recurring revenue</div><div className={`value${financialsConfirmed ? "" : " value-warning"}`}>{financialsConfirmed ? gbp(totalSell) : "Unconfirmed"}</div></div>
+        <div className="stat"><div className="label">Annual supplier cost</div><div className="value">{gbp(totalCost)}</div></div>
+        <div className="stat"><div className="label">Annual margin</div><div className={`value${financialsConfirmed ? "" : " value-warning"}`}>{financialsConfirmed ? gbp(totalSell - totalCost) : "Unconfirmed"}</div></div>
+      </div>
+
+      {attentionCount > 0 && <div className="attention-panel">
+        <strong>{attentionCount} item{attentionCount === 1 ? "" : "s"} need attention</strong>
+        {missingPrices.map((s) => <div key={`price-${s.id}`}>{s.label} selling price missing <a href={`#service-${s.id}`}>Set price →</a></div>)}
+        {reviewServices.map((s) => <div key={`review-${s.id}`}>{s.label} billing period needs checking <a href="#billing">Review billing →</a></div>)}
+        {anniversaryMismatches.map((s) => <div key={`anniversary-${s.id}`}>{s.label} invoice anniversary differs from its supplier renewal date <a href="#invoice-suggestions">Review invoice evidence →</a></div>)}
+        {proposals.length > 0 && <div>{proposals.length} invoice suggestion{proposals.length === 1 ? "" : "s"} need a decision <a href="#invoice-suggestions">Review suggestions →</a></div>}
+      </div>}
+
+      <details className="card website-admin" id="advanced">
+        <summary><strong>Advanced settings</strong></summary>
+        <div className="mt">
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <WebsiteClient
             websiteId={website.id}
@@ -281,21 +327,6 @@ export default async function WebsitePage({
           )}
         </div>
 
-        {website.services.length > 0 && (
-          <p className="muted small mt">
-            {active.length} active service(s) · {gbp(totalSell)} billed annually · {gbp(totalCost)}{" "}
-            cost · <strong>{gbp(totalSell - totalCost)} margin</strong>
-            {unbilled.length > 0 && (
-              <>
-                {" · "}
-                <span className="paid-no">{unbilled.length} not billed this period</span>
-              </>
-            )}
-          </p>
-        )}
-
-        <details className="mt">
-          <summary className="muted small">Edit website</summary>
           <form action={updateWebsite.bind(null, website.id)} className="stack mt">
             <div className="row">
               <div className="field">
@@ -317,10 +348,10 @@ export default async function WebsitePage({
               </button>
             </div>
           </form>
-        </details>
-      </div>
+        </div>
+      </details>
 
-      <div className="card">
+      <div className="card website-billing" id="billing">
         <div className="page-head" style={{ marginBottom: 8 }}>
           <h2 style={{ margin: 0 }}>Billing periods</h2>
           <span className="small">
@@ -395,8 +426,8 @@ export default async function WebsitePage({
         )}
       </div>
 
-      <div className="card">
-        <h2>Services</h2>
+      <div className="card website-services">
+        <h2>Recurring services</h2>
         {website.services.length === 0 ? (
           <p className="muted">
             Nothing attached yet — use <strong>Attach services</strong> below, or add one.
@@ -423,7 +454,7 @@ export default async function WebsitePage({
                 const days = daysUntilRenewal(s);
                 const next = nextRenewal(s);
                 return (
-                  <tr key={s.id} style={s.active ? undefined : { opacity: 0.55 }}>
+                  <tr key={s.id} id={`service-${s.id}`} style={s.active ? undefined : { opacity: 0.55 }}>
                     <td>
                       <details>
                         <summary>
@@ -436,7 +467,7 @@ export default async function WebsitePage({
                     <td>
                       <span className="badge badge-type">{serviceKindLabel(s.kind)}</span>
                     </td>
-                    <td className="muted small">{s.provider ?? "—"}</td>
+                    <td className="muted small">{s.provider ?? "Provider not set"}</td>
                     <td className="muted small">
                       {next ? (
                         <>
@@ -447,12 +478,12 @@ export default async function WebsitePage({
                           {period && <div className="small">{periodLabel(period)}</div>}
                         </>
                       ) : (
-                        "—"
+                        "Renewal date missing"
                       )}
                     </td>
-                    <td className="num">{s.quantity !== 1 ? s.quantity : ""}</td>
+                    <td className="num">{s.quantity !== 1 ? s.quantity : "1"}</td>
                     <td className="num">{gbp(annualCost(s))}</td>
-                    <td className="num">{gbp(annualSell(s))}</td>
+                    <td className="num">{s.sellPrice > 0 ? gbp(annualSell(s)) : <span className="paid-no">Price missing</span>}</td>
                     <td>
                       <span
                         className={`badge ${state === "BILLED" || state === "NOT_BILLABLE" ? "badge-life-COMPLETE" : state === "REVIEW" ? "badge-review" : "badge-life-LOST"}`}
@@ -478,7 +509,7 @@ export default async function WebsitePage({
           </table>
         )}
 
-        <details className="mt">
+        <details className="mt" id="add-service">
           <summary>Add a service</summary>
           <form action={createRecurringService} className="stack mt">
             <input type="hidden" name="websiteId" value={website.id} />
@@ -544,15 +575,14 @@ export default async function WebsitePage({
               </button>
             </div>
           </form>
+          <div className="attach-inside-flow">
+            <h3>Or attach an existing service</h3>
+            <AttachServices websiteId={website.id} services={looseServices} />
+          </div>
         </details>
       </div>
 
-      <div className="card">
-        <h2>Attach services</h2>
-        <AttachServices websiteId={website.id} services={looseServices} />
-      </div>
-
-      <div className="card">
+      <div className="card website-invoices" id="invoice-suggestions">
         <div className="page-head" style={{ marginBottom: 12 }}>
           <h2>Invoices</h2>
           {website.clientId && website.services.length > 0 && (
@@ -747,7 +777,7 @@ export default async function WebsitePage({
         )}
       </div>
 
-      <div className="card">
+      <div className="card website-history">
         <h2>Billing history</h2>
         {allBillings.length === 0 ? (
           <p className="muted">
@@ -784,8 +814,9 @@ export default async function WebsitePage({
         )}
       </div>
 
-      <div className="card">
-        <h2>Danger zone</h2>
+      <details className="card website-danger" id="advanced-delete">
+        <summary><strong>Delete website</strong></summary>
+        <div className="mt">
         <form action={deleteWebsiteAndReturn.bind(null, website.id)}>
           <button type="submit" className="btn btn-danger btn-sm">
             Delete website
@@ -794,7 +825,8 @@ export default async function WebsitePage({
             Its {website.services.length} service(s) are kept, just ungrouped.
           </span>
         </form>
-      </div>
-    </>
+        </div>
+      </details>
+    </div>
   );
 }

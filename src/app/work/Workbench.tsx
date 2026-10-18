@@ -288,15 +288,17 @@ export default function Workbench({
           />
         </EditorDialog>
       )}
-      <div className="card">
-        <h2>Quick add</h2>
-        <TaskEditor
-          key={captureKey}
-          data={data}
-          defaultAssigneeId={mode === "mine" ? currentUserId : undefined}
-          onSaved={saved}
-        />
-      </div>
+      <details className="work-quick-add card">
+        <summary className="btn">+ Quick-add task</summary>
+        <div className="mt">
+          <TaskEditor
+            key={captureKey}
+            data={data}
+            defaultAssigneeId={mode === "mine" ? currentUserId : undefined}
+            onSaved={saved}
+          />
+        </div>
+      </details>
       <div className="work-filters">
         <label>
           Search tasks

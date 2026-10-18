@@ -29,6 +29,7 @@
   width: 220px;
   background: var(--gcw-navy);
   color: #fff;
+  overflow-y: auto;
 }
 .sidebar-inner { min-height: 100%; display: flex; flex-direction: column; }
 .sidebar .brand {
@@ -40,6 +41,7 @@
 }
 .app-nav { display: grid; }
 .app-nav a,
+.app-nav-group > summary,
 .sidebar-settings {
   padding: 14px 22px;
   border-left: 3px solid transparent;
@@ -48,8 +50,17 @@
   font-weight: 500;
 }
 .app-nav a:hover,
+.app-nav-group > summary:hover,
 .sidebar-settings:hover { color: #fff; text-decoration: none; background: rgba(255,255,255,.05); }
-.app-nav a.active { color: #fff; background: rgba(255,255,255,.12); border-left-color: var(--accent); }
+.app-nav a.active,
+.app-nav-group > summary.active { color: #fff; background: rgba(255,255,255,.12); border-left-color: var(--accent); }
+.app-nav-group > summary { cursor: pointer; list-style: none; position: relative; }
+.app-nav-group > summary::-webkit-details-marker { display: none; }
+.app-nav-group > summary::after { content: "›"; position: absolute; right: 20px; transition: transform .15s ease; }
+.app-nav-group[open] > summary::after { transform: rotate(90deg); }
+.app-subnav { display: grid; padding: 3px 0 7px; background: rgba(0,0,0,.1); }
+.app-subnav a { padding: 7px 22px 7px 34px; border-left-width: 2px; font-size: 13px; }
+.app-subnav a.active { background: rgba(255,255,255,.07); }
 .sidebar-footer { margin-top: auto; padding-bottom: 20px; }
 .sidebar .global-search { width: auto; margin: 0 16px 14px; }
 .sidebar .global-search input { background: rgba(255,255,255,.1); }
@@ -64,8 +75,12 @@
   .sidebar-inner { min-height: 0; }
   .sidebar .brand { padding: 16px 18px 10px; }
   .app-nav { display: flex; overflow-x: auto; }
-  .app-nav a { flex: 0 0 auto; padding: 10px 14px; border-left: 0; border-bottom: 3px solid transparent; }
-  .app-nav a.active { border-bottom-color: var(--accent); }
+  .app-nav > a,
+  .app-nav-group > summary { flex: 0 0 auto; padding: 10px 14px; border-left: 0; border-bottom: 3px solid transparent; }
+  .app-nav > a.active,
+  .app-nav-group > summary.active { border-bottom-color: var(--accent); }
+  .app-nav-group { flex: 0 0 auto; }
+  .app-subnav { position: absolute; z-index: 60; min-width: 210px; background: var(--gcw-navy); box-shadow: 0 12px 24px rgba(0,0,0,.25); }
   .sidebar-footer { display: none; }
   .app-content { margin-left: 0; padding: 24px 16px 56px; }
 }
@@ -373,6 +388,7 @@ h2 {
 .website-admin { order: 9; }
 .website-danger { order: 10; }
 .attach-inside-flow { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+.manual-invoice-links { padding-top: 18px; border-top: 1px solid var(--border); }
 .website-danger > summary { cursor: pointer; color: var(--danger); }
 
 /* Keep operational work readable as a queue, rather than a card gallery. */

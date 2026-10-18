@@ -584,10 +584,15 @@ export default async function WebsitePage({
 
       <div className="card website-invoices" id="invoice-suggestions">
         <div className="page-head" style={{ marginBottom: 12 }}>
-          <h2>Invoices</h2>
+          <div>
+            <h2>Invoice reconciliation</h2>
+            <div className="muted small">
+              {proposals.length} suggested · {openLines.length - proposals.length} unmatched · {linkedLines.length} linked
+            </div>
+          </div>
           {website.clientId && website.services.length > 0 && (
             <form action={scanWebsiteInvoicesAction.bind(null, website.id)}>
-              <button type="submit" className="btn btn-sm">
+              <button type="submit" className="btn btn-secondary btn-sm">
                 Scan invoices
               </button>
             </form>
@@ -650,7 +655,7 @@ export default async function WebsitePage({
                                   </option>
                                 ))}
                               </select>
-                              <button type="submit" className="btn btn-sm">
+                              <button type="submit" className="btn btn-secondary btn-sm">
                                 Link
                               </button>
                             </form>
@@ -710,11 +715,11 @@ export default async function WebsitePage({
             )}
 
             {openLines.length > proposals.length && (
-              <details className="mt">
-                <summary className="muted small">
-                  Other invoice lines for this client ({openLines.length - proposals.length}) — link one
-                  by hand
-                </summary>
+              <section className="mt manual-invoice-links">
+                <h3>Link other invoice lines ({openLines.length - proposals.length})</h3>
+                <p className="muted small">
+                  Choose the recurring service each unmatched Xero line pays for, or mark it as unrelated to this website.
+                </p>
                 <table className="mt">
                   <thead>
                     <tr>
@@ -749,7 +754,7 @@ export default async function WebsitePage({
                                   </option>
                                 ))}
                               </select>
-                              <button type="submit" className="btn btn-sm">
+                              <button type="submit" className="btn btn-secondary btn-sm">
                                 Link
                               </button>
                             </form>
@@ -765,7 +770,7 @@ export default async function WebsitePage({
                       ))}
                   </tbody>
                 </table>
-              </details>
+              </section>
             )}
 
             {invoiceLines.length === 0 && (

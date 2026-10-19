@@ -403,8 +403,13 @@ export async function linkInvoiceLineToService(
   revalidateWebsite(websiteId, service?.clientId);
 }
 
-/** Dismiss a line so it stops being offered — it isn't one of ours. */
-export async function ignoreInvoiceLine(lineId: string, websiteId: string) {
+/**
+ * Record that a client invoice line is genuine work, but not recurring work.
+ *
+ * The Xero evidence remains intact. `reviewed` only stops reconciliation from
+ * repeatedly proposing the line as payment for a recurring service.
+ */
+export async function markInvoiceLineAsOtherWork(lineId: string, websiteId: string) {
   await requireUser();
   await prisma.xeroInvoiceLine.update({
     where: { id: lineId },

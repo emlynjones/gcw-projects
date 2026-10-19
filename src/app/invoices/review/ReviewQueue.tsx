@@ -24,7 +24,7 @@ export default function ReviewQueue({ rows }: { rows: QueueRow[] }) {
   // Confirmed rows are tracked rather than "unconfirmed", so nothing is ever
   // written because a checkbox happened to default to on.
   const [confirm, setConfirm] = useState<Set<string>>(new Set());
-  const [ignore, setIgnore] = useState<Set<string>>(new Set());
+  const [otherWork, setOtherWork] = useState<Set<string>>(new Set());
   const [view, setView] = useState<View>("auto");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
@@ -65,23 +65,23 @@ export default function ReviewQueue({ rows }: { rows: QueueRow[] }) {
 
   function toggleConfirm(r: QueueRow, on: boolean) {
     const next = new Set(confirm);
-    const nextIgnore = new Set(ignore);
+    const nextOtherWork = new Set(otherWork);
     if (on) {
       next.add(key(r));
-      nextIgnore.delete(r.lineId);
+      nextOtherWork.delete(r.lineId);
     } else next.delete(key(r));
     setConfirm(next);
-    setIgnore(nextIgnore);
+    setOtherWork(nextOtherWork);
   }
 
-  function toggleIgnore(r: QueueRow, on: boolean) {
-    const next = new Set(ignore);
+  function toggleOtherWork(r: QueueRow, on: boolean) {
+    const next = new Set(otherWork);
     const nextConfirm = new Set(confirm);
     if (on) {
       next.add(r.lineId);
       nextConfirm.delete(key(r));
     } else next.delete(r.lineId);
-    setIgnore(next);
+    setOtherWork(next);
     setConfirm(nextConfirm);
   }
 
@@ -90,26 +90,26 @@ export default function ReviewQueue({ rows }: { rows: QueueRow[] }) {
 
   function togglePage(on: boolean) {
     const next = new Set(confirm);
-    const nextIgnore = new Set(ignore);
+    const nextOtherWork = new Set(otherWork);
     for (const r of shown) {
       if (on) {
         next.add(key(r));
-        nextIgnore.delete(r.lineId);
+        nextOtherWork.delete(r.lineId);
       } else next.delete(key(r));
     }
     setConfirm(next);
-    setIgnore(nextIgnore);
+    setOtherWork(nextOtherWork);
   }
 
   function tickAllFiltered() {
     const next = new Set(confirm);
-    const nextIgnore = new Set(ignore);
+    const nextOtherWork = new Set(otherWork);
     for (const r of filtered) {
       next.add(key(r));
-      nextIgnore.delete(r.lineId);
+      nextOtherWork.delete(r.lineId);
     }
     setConfirm(next);
-    setIgnore(nextIgnore);
+    setOtherWork(nextOtherWork);
   }
 
   const chip = (v: View, label: string, n: number) => (
@@ -156,7 +156,7 @@ export default function ReviewQueue({ rows }: { rows: QueueRow[] }) {
           className="btn btn-sm btn-secondary"
           onClick={() => {
             setConfirm(new Set());
-            setIgnore(new Set());
+            setOtherWork(new Set());
           }}
         >
           Clear
@@ -190,7 +190,7 @@ export default function ReviewQueue({ rows }: { rows: QueueRow[] }) {
             <th>Period</th>
             <th className="num">Amount</th>
             <th>Why</th>
-            <th style={{ width: 60 }}>Ignore</th>
+            <th style={{ width: 90 }}>Other work</th>
           </tr>
         </thead>
         <tbody>
@@ -244,9 +244,9 @@ export default function ReviewQueue({ rows }: { rows: QueueRow[] }) {
                 <td>
                   <input
                     type="checkbox"
-                    checked={ignore.has(r.lineId)}
-                    onChange={(e) => toggleIgnore(r, e.target.checked)}
-                    title="Not a recurring charge — stop proposing it"
+                    checked={otherWork.has(r.lineId)}
+                    onChange={(e) => toggleOtherWork(r, e.target.checked)}
+                    title="Keep in Xero history, but do not treat as recurring-service billing"
                   />
                 </td>
               </tr>
@@ -289,14 +289,14 @@ export default function ReviewQueue({ rows }: { rows: QueueRow[] }) {
       {[...confirm].map((k) => (
         <input key={k} type="hidden" name="confirm" value={k} />
       ))}
-      {[...ignore].map((id) => (
-        <input key={id} type="hidden" name="ignore" value={id} />
+      {[...otherWork].map((id) => (
+        <input key={id} type="hidden" name="otherWork" value={id} />
       ))}
 
       <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <button className="btn" type="submit" disabled={!confirm.size && !ignore.size}>
+        <button className="btn" type="submit" disabled={!confirm.size && !otherWork.size}>
           Apply {confirm.size} link{confirm.size === 1 ? "" : "s"}
-          {ignore.size ? `, ignore ${ignore.size}` : ""}
+          {otherWork.size ? `, mark ${otherWork.size} as other work` : ""}
         </button>
         <span className="muted small">Selections carry across pages and filters.</span>
       </div>

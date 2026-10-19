@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { matchInvoiceLines, toMatchableLine, type MatchableService } from "@/lib/billing-match";
-import { applyLinks, applyIgnores } from "@/lib/billing-apply";
+import { applyLinks, applyOtherWork } from "@/lib/billing-apply";
 import { serviceKindLabel } from "@/lib/recurring";
 
 async function requireUser() {
@@ -161,7 +161,7 @@ export async function buildReviewQueue(): Promise<QueueRow[]> {
 const fmtDate = (d: Date) =>
   new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(d);
 
-export type ApplyResult = { linked: number; ignored: number; pricesSet: number };
+export type ApplyResult = { linked: number; otherWork: number; pricesSet: number };
 
 /**
  * Apply the rows ticked in the queue.
@@ -180,7 +180,9 @@ export async function applyReviewSelections(formData: FormData): Promise<void> {
     .map(([lineId, serviceId]) => ({ lineId, serviceId }));
 
   const { linked, pricesSet } = await applyLinks(pairs, "MANUAL");
-  const ignored = await applyIgnores(formData.getAll("ignore").map(String).filter(Boolean));
+  const otherWork = await applyOtherWork(
+    formData.getAll("otherWork").map(String).filter(Boolean)
+  );
 
   revalidatePath("/invoices/review");
   revalidatePath("/recurring");
@@ -189,7 +191,7 @@ export async function applyReviewSelections(formData: FormData): Promise<void> {
   const params = new URLSearchParams({
     applied: "1",
     linked: String(linked),
-    ignored: String(ignored),
+    otherWork: String(otherWork),
     prices: String(pricesSet),
   });
   redirect(`/invoices/review?${params.toString()}`);
@@ -220,7 +222,7 @@ export async function confirmAllAuto(): Promise<void> {
   const params = new URLSearchParams({
     applied: "1",
     linked: String(linked),
-    ignored: "0",
+    otherWork: "0",
     prices: String(pricesSet),
   });
   redirect(`/invoices/review?${params.toString()}`);

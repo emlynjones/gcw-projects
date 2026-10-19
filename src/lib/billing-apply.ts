@@ -86,8 +86,8 @@ async function seedSellPrice(
   }
 }
 
-/** Mark a line as looked-at and deliberately not linked. */
-export async function applyIgnore(lineId: string) {
+/** Mark a line as genuine client work that does not pay for a recurring service. */
+export async function applyOtherWorkLine(lineId: string) {
   await prisma.xeroInvoiceLine.update({
     where: { id: lineId },
     data: { reviewed: true, recurringServiceId: null },
@@ -189,8 +189,8 @@ export async function applyLinks(
   return { linked, pricesSet: priced.size };
 }
 
-/** Mark many lines reviewed-and-unlinked in one go. */
-export async function applyIgnores(lineIds: string[]): Promise<number> {
+/** Mark many lines reviewed as non-recurring work in one go. */
+export async function applyOtherWork(lineIds: string[]): Promise<number> {
   if (!lineIds.length) return 0;
   const r = await prisma.xeroInvoiceLine.updateMany({
     where: { id: { in: lineIds } },

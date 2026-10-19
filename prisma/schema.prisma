@@ -489,8 +489,8 @@ model XeroInvoiceLine {
   syncedAt      DateTime @default(now())
 
   // What this line pays for. `reviewed` covers both outcomes of a human looking
-  // at it — linked, or deliberately dismissed — so a dismissed line isn't
-  // re-proposed on every scan. The Xero sync never writes either column, so
+  // at it — linked, or confirmed as other/non-recurring work — so that line
+  // isn't re-proposed on every scan. The Xero sync never writes either column, so
   // re-syncing refreshes the invoice data and leaves these decisions intact.
   recurringServiceId String?
   service            RecurringService? @relation(fields: [recurringServiceId], references: [id])

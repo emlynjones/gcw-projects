@@ -25,7 +25,7 @@ import {
   deleteWebsiteAndReturn,
   scanWebsiteInvoicesAction,
   linkInvoiceLineToService,
-  ignoreInvoiceLine,
+  markInvoiceLineAsOtherWork,
   unlinkInvoiceLine,
 } from "@/app/website-actions";
 import ServiceEditor from "@/app/components/ServiceEditor";
@@ -663,9 +663,9 @@ export default async function WebsitePage({
                           </td>
                           <td className="muted small">{periodLabel(p.period)}</td>
                           <td>
-                            <form action={ignoreInvoiceLine.bind(null, p.lineId, website.id)}>
+                            <form action={markInvoiceLineAsOtherWork.bind(null, p.lineId, website.id)}>
                               <button type="submit" className="btn btn-ghost btn-sm">
-                                Not ours
+                                Other work
                               </button>
                             </form>
                           </td>
@@ -718,7 +718,9 @@ export default async function WebsitePage({
               <section className="mt manual-invoice-links">
                 <h3>Link other invoice lines ({openLines.length - proposals.length})</h3>
                 <p className="muted small">
-                  Choose the recurring service each unmatched Xero line pays for, or mark it as unrelated to this website.
+                  Choose the recurring service each unmatched Xero line pays for, or mark it as
+                  other work. Other work remains in the imported Xero history but won&apos;t be
+                  treated as recurring-service billing or proposed again.
                 </p>
                 <table className="mt">
                   <thead>
@@ -760,9 +762,9 @@ export default async function WebsitePage({
                             </form>
                           </td>
                           <td>
-                            <form action={ignoreInvoiceLine.bind(null, l.id, website.id)}>
+                            <form action={markInvoiceLineAsOtherWork.bind(null, l.id, website.id)}>
                               <button type="submit" className="btn btn-ghost btn-sm">
-                                Not ours
+                                Other work
                               </button>
                             </form>
                           </td>

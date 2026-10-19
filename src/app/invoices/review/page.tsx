@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export default async function ReviewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ applied?: string; linked?: string; ignored?: string; prices?: string }>;
+  searchParams: Promise<{ applied?: string; linked?: string; otherWork?: string; prices?: string }>;
 }) {
-  const { applied, linked, ignored, prices } = await searchParams;
+  const { applied, linked, otherWork, prices } = await searchParams;
 
   const [rows, totalLines, linkedLines] = await Promise.all([
     buildReviewQueue(),
@@ -40,14 +40,16 @@ export default async function ReviewPage({
       {applied === "1" && (
         <div className="success-msg">
           Linked {linked} line{linked === "1" ? "" : "s"}
-          {ignored && ignored !== "0" ? `, ignored ${ignored}` : ""}
+          {otherWork && otherWork !== "0" ? `, marked ${otherWork} as other work` : ""}
           {prices && prices !== "0" ? `, set ${prices} sell price${prices === "1" ? "" : "s"}` : ""}.
         </div>
       )}
 
       <p className="muted">
         {linkedLines.toLocaleString()} of {totalLines.toLocaleString()} imported lines are linked to
-        a service. Everything below is a proposal — nothing is recorded until you confirm it.
+        a service. Marking a line as <strong>Other work</strong> keeps it in the imported Xero
+        history, but confirms that it does not pay for a recurring service and stops it being
+        proposed again. Everything below is a proposal until you confirm it.
       </p>
 
       {totalLines === 0 ? (

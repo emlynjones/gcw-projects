@@ -24,31 +24,37 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body>
         {session?.user && (
-          <aside className="sidebar">
-            <div className="sidebar-inner">
-              <Link href="/" className="brand">
-                GCW Projects
-              </Link>
-              <AppNav />
-              <div className="sidebar-footer">
+          <>
+            <aside className="sidebar">
+              <div className="sidebar-inner">
+                <Link href="/" className="brand">
+                  GCW Projects
+                </Link>
+                <AppNav />
+                <div className="sidebar-footer">
+                  <Link href="/settings" className="sidebar-settings">Settings</Link>
+                </div>
+              </div>
+            </aside>
+            <header className="admin-bar">
+              <div className="admin-bar-tools">
                 <GlobalSearch />
-                <Link href="/settings" className="sidebar-settings">Settings</Link>
-              <div className="topbar-user">
-                <span>{session.user.name ?? session.user.email}</span>
-                <form
-                  action={async () => {
-                    "use server";
-                    await signOut({ redirectTo: "/login" });
-                  }}
-                >
-                  <button type="submit" className="btn btn-ghost btn-sm">
-                    Sign out
-                  </button>
-                </form>
+                <div className="topbar-user">
+                  <span>{session.user.name ?? session.user.email}</span>
+                  <form
+                    action={async () => {
+                      "use server";
+                      await signOut({ redirectTo: "/login" });
+                    }}
+                  >
+                    <button type="submit" className="btn btn-ghost btn-sm">
+                      Sign out
+                    </button>
+                  </form>
+                </div>
               </div>
-              </div>
-            </div>
-          </aside>
+            </header>
+          </>
         )}
         <main className={`container${session?.user ? " app-content" : ""}`}>{children}</main>
       </body>

@@ -164,8 +164,17 @@ export function TaskChecklist({
 
   return (
     <div className="report-tasks">
+      {/* Static copy for the printout; the interactive list is hidden there. */}
+      <div className="print-only">
+        {tasks.map((t) => (
+          <div key={t.id} className={`print-task${t.status === "DONE" ? " print-task-done" : ""}`}>
+            {t.status === "DONE" ? "☑" : "☐"} {t.title}
+          </div>
+        ))}
+        {tasks.length === 0 && <div className="muted small">No tasks listed.</div>}
+      </div>
       {tasks.map((t) => (
-        <label key={t.id} className="report-task" style={{ display: "flex", gap: 8, padding: "2px 0" }}>
+        <label key={t.id} className="report-task no-print" style={{ display: "flex", gap: 8, padding: "2px 0" }}>
           <input
             type="checkbox"
             checked={t.status === "DONE"}
@@ -179,7 +188,7 @@ export function TaskChecklist({
           </span>
         </label>
       ))}
-      {tasks.length === 0 && <div className="muted small">No tasks yet.</div>}
+      {tasks.length === 0 && <div className="muted small no-print">No tasks yet.</div>}
       {error && <div className="paid-no small">{error}</div>}
       <form
         className="inline-form no-print"

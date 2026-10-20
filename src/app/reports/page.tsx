@@ -228,6 +228,10 @@ export default async function ReportsPage() {
                     )}
                   </div>
                 </div>
+                <div className="print-only">
+                  <div className="print-jot-label">Meeting notes / actions</div>
+                  <div className="print-jot" />
+                </div>
               </div>
             );
           })}

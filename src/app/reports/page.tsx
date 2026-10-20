@@ -10,10 +10,13 @@ import {
   lifecycleOf,
   PROJECT_STAGES,
   LOST,
+  stagesFor,
+  canMarkLost,
 } from "@/lib/status";
 import { getAiStatus } from "@/lib/settings";
 import { generateNextSteps, generateAllNextSteps } from "@/app/ai-actions";
 import PrintButton from "./PrintButton";
+import { StageSelect, QuickNote, HoursInput, TaskChecklist } from "./ReportControls";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +34,20 @@ export default async function ReportsPage() {
   });
 
   const ai = await getAiStatus();
+  const tasks = await prisma.task.findMany({
+    where: { project: { archived: false } },
+    select: { id: true, projectId: true, title: true, status: true, version: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const tasksByProject = new Map<string, typeof tasks>();
+  for (const t of tasks) tasksByProject.set(t.projectId, [...(tasksByProject.get(t.projectId) ?? []), t]);
+
+  // LOST is only a valid destination from the enquiry phase (see setProjectStage).
+  const stageOptions = (p: { type: string; stage: string }) =>
+    [...stagesFor(p.type), ...(canMarkLost(p.stage) ? [LOST] : [])].map((s) => ({
+      value: s,
+      label: stageLabel(s),
+    }));
   const withLife = projects.map((p) => ({ ...p, lifecycle: lifecycleOf(p) }));
 
   // Ad-hoc that still needs doing (anything not invoiced / lost), most urgent first.
@@ -80,8 +97,9 @@ export default async function ReportsPage() {
               <tr>
                 <th>Job</th>
                 <th>Client</th>
+                <th>Tasks</th>
                 <th>Stage</th>
-                <th className="num">Hours (done / budget)</th>
+                <th className="num">Hours done / budget</th>
                 <th className="num">Value</th>
               </tr>
             </thead>
@@ -95,13 +113,25 @@ export default async function ReportsPage() {
                     <td>
                       <Link href={`/projects/${p.id}`}>{p.title}</Link>
                       {p.description && <div className="muted small tasks-preview">{p.description}</div>}
+                      <QuickNote projectId={p.id} />
                     </td>
                     <td className="muted">{p.client.name}</td>
+                    <td style={{ minWidth: 240 }}>
+                      <TaskChecklist
+                        key={(tasksByProject.get(p.id) ?? []).map((t) => `${t.id}:${t.version}`).join("|")}
+                        projectId={p.id}
+                        initial={tasksByProject.get(p.id) ?? []}
+                      />
+                    </td>
                     <td>
-                      <span className="badge badge-stage">{stageLabel(p.stage)}</span>
+                      <span className="print-only badge badge-stage">{stageLabel(p.stage)}</span>
+                      <StageSelect projectId={p.id} stage={p.stage} options={stageOptions(p)} />
                     </td>
                     <td className={`num ${over ? "paid-no" : ""}`}>
-                      {done} / {budget || "—"}
+                      <span className="no-print">
+                        <HoursInput projectId={p.id} hours={p.hoursDone} />
+                      </span>
+                      <span className="print-only">{done}</span> / {budget || "—"}
                       {over ? " ⚠" : ""}
                     </td>
                     <td className="num">{gbp(p.totalValue)}</td>
@@ -141,7 +171,17 @@ export default async function ReportsPage() {
                     </Link>{" "}
                     <span className="muted small">· {p.client.name}</span>
                     {p.targetDate && <span className="muted small"> · due {monthFmt(p.targetDate)}</span>}
+                    {(() => {
+                      const t = tasksByProject.get(p.id) ?? [];
+                      return t.length > 0 ? (
+                        <span className="muted small">
+                          {" "}
+                          · {t.filter((x) => x.status === "DONE").length}/{t.length} tasks done
+                        </span>
+                      ) : null;
+                    })()}
                   </div>
+                  <StageSelect projectId={p.id} stage={p.stage} options={stageOptions(p)} />
                   {ai.configured && (
                     <form action={generateNextSteps.bind(null, p.id)} className="no-print">
                       <button type="submit" className="btn btn-ghost btn-sm" title="Refresh AI next steps">
@@ -163,6 +203,7 @@ export default async function ReportsPage() {
                         </div>
                       ))
                     )}
+                    <QuickNote projectId={p.id} />
                   </div>
 
                   <div className="report-next">

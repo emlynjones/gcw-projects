@@ -78,6 +78,12 @@ export const taskRowPatch = z
   })
   .partial();
 
+export const taskNoteBody = z
+  .string()
+  .trim()
+  .min(1, "Enter a note")
+  .max(10000, "Keep notes to 10,000 characters or fewer");
+
 // Bullet/numbered/checkbox lines from free-text job details. Prose is ignored
 // so a plain paragraph never turns into tasks by accident.
 export function parseTaskLines(text: string | null | undefined): string[] {

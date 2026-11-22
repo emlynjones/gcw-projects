@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { STATUSES, STATUS_LABELS } from "@/modules/work/domain";
 import type { WorkData } from "@/modules/work/application";
 import TaskEditor from "./TaskEditor";
+import TaskNotes from "./TaskNotes";
+import TaskSummary from "./TaskSummary";
+import { taskProgressSummary } from "@/modules/work/summary";
 import {
   createTaskRowAction,
   deleteTaskAction,
@@ -236,6 +239,7 @@ function TaskRow({
               onSaved={saved}
               onCancel={onToggle}
             />
+            <TaskNotes task={task} locked={locked} />
             {!locked && (
               <DeleteTask
                 taskId={task.id}
@@ -432,6 +436,7 @@ export default function TaskTable({
             ` · Milestones ${milestones.filter((task) => task.status === "DONE").length}/${milestones.length}`}
         </p>
       </div>
+      <TaskSummary text={taskProgressSummary(data.projects.find((project) => project.id === projectId)?.title ?? "Work", tasks)} />
       <div className="task-table-wrap">
         <table className="task-table">
           <thead>

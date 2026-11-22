@@ -194,6 +194,7 @@ model User {
   passwordHash String?
   createdAt    DateTime @default(now())
   assignedTasks Task[]
+  taskNotes TaskNote[]
   workCapacity StaffWeekCapacity[]
   processRevisions ProcessRevision[]
   processChanges ProcessChange[]
@@ -221,6 +222,7 @@ model Task {
   version Int @default(0)
   dependencies TaskDependency[] @relation("Dependent")
   dependents TaskDependency[] @relation("Prerequisite")
+  notes TaskNote[]
   processItem AppliedProcessItem?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -228,6 +230,21 @@ model Task {
   @@index([projectId, status])
   @@index([assigneeId, plannedDate])
   @@index([dueDate])
+}
+
+// Append-only progress notes record what happened without rewriting the task
+// description or completion criteria.
+model TaskNote {
+  id String @id @default(cuid())
+  taskId String
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId String
+  author User @relation(fields: [authorId], references: [id])
+  body String
+  createdAt DateTime @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([authorId])
 }
 
 model TaskDependency {

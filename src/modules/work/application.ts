@@ -7,6 +7,7 @@ import {
   parseGeneratedTaskTitles,
   parseTaskLines,
   taskInput,
+  taskNoteBody,
   taskRowPatch,
 } from "./domain";
 import { z } from "zod";
@@ -158,6 +159,25 @@ export async function deleteTask(input: {
   });
 }
 
+export async function addTaskNote(input: {
+  taskId: string;
+  authorId: string;
+  body: unknown;
+}) {
+  const body = taskNoteBody.parse(input.body);
+  const task = await prisma.task.findUnique({
+    where: { id: input.taskId },
+    select: { projectId: true, project: { select: { archived: true } } },
+  });
+  if (!task) throw new Error("This task no longer exists. Reload the page.");
+  if (task.project.archived)
+    throw new Error("Archived projects cannot be changed.");
+  await prisma.taskNote.create({
+    data: { taskId: input.taskId, authorId: input.authorId, body },
+  });
+  return { projectId: task.projectId };
+}
+
 // Explicit, retry-safe conversion: the description is read server-side and
 // titles already present on the project are skipped. The description itself
 // is left untouched for the user to tidy.
@@ -291,6 +311,10 @@ export async function getWorkData(projectId?: string) {
       },
       include: {
         dependencies: true,
+        notes: {
+          include: { author: { select: { name: true } } },
+          orderBy: { createdAt: "asc" },
+        },
         processItem: {
           include: {
             application: {
@@ -315,8 +339,14 @@ export async function getWorkData(projectId?: string) {
   ]);
   return {
     tasks: tasks.map(
-      ({ createdAt, updatedAt, completedAt, dependencies, processItem, ...task }) => ({
+      ({ createdAt, updatedAt, completedAt, dependencies, processItem, notes, ...task }) => ({
         ...task,
+        notes: notes.map((note) => ({
+          id: note.id,
+          body: note.body,
+          authorName: note.author.name,
+          createdAt: note.createdAt.toISOString(),
+        })),
         processOrigin: processItem ? {
           name: processItem.application.revision.name,
           number: processItem.application.revision.number,

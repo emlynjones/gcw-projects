@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import {
   createReviewedTasks,
+  addTaskNote,
   createTasksFromDetails,
   deleteTask,
   saveCapacity,
@@ -60,6 +61,20 @@ const refresh = (projectId: string) => {
   revalidatePath("/work");
   revalidatePath(`/projects/${projectId}`);
 };
+
+export async function addTaskNoteAction(
+  taskId: string,
+  body: string,
+): Promise<WorkResult> {
+  try {
+    const user = await requireWorkUser();
+    const result = await addTaskNote({ taskId, authorId: user.id, body });
+    refresh(result.projectId);
+    return { saved: "Note added" };
+  } catch (error) {
+    return { error: message(error) };
+  }
+}
 
 export async function updateTaskRowAction(
   id: string,

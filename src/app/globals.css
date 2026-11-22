@@ -1623,6 +1623,15 @@ table.compact td {
 .task-error { font-size: .85rem; padding-top: 0; border-top: 0; }
 .task-delete { margin-top: 12px; }
 .task-add-button { margin-top: 12px; }
+.task-notes { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.task-notes h3 { margin: 0 0 8px; font-size: 1rem; }
+.task-notes ol { margin: 0 0 12px; padding-left: 22px; }
+.task-notes li { margin: 0 0 10px; white-space: pre-wrap; }
+.task-notes form { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.task-notes textarea { flex: 1 1 360px; }
+.task-summary { margin-top: 12px; }
+.task-summary-output { display: grid; gap: 8px; margin-top: 8px; }
+.task-summary-output textarea { width: 100%; font: inherit; line-height: 1.45; }
 .task-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: #f8fafc; }
 .task-add select, .task-add input { width: auto; }
 .task-add .task-add-title { flex: 1 1 220px; width: auto; border-color: var(--border); background: #fff; }

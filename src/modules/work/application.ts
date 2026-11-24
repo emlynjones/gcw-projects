@@ -115,6 +115,7 @@ export async function updateTaskRow(input: {
     priority: task.priority,
     estimatedHours: task.estimatedHours ?? "",
     plannedDate: task.plannedDate ?? "",
+    plannedPeriod: task.plannedPeriod ?? "",
     completionCriteria: task.completionCriteria,
     sopUrl: task.sopUrl ?? "",
     isMilestone: task.isMilestone,

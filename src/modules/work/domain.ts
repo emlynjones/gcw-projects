@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const STATUSES = ["TODO", "IN_PROGRESS", "BLOCKED", "DONE"] as const;
 export const PRIORITIES = ["URGENT", "HIGH", "NORMAL", "LOW"] as const;
+export const PLANNED_PERIODS = ["AM", "PM"] as const;
 export const STATUS_LABELS: Record<string, string> = {
   TODO: "To do",
   IN_PROGRESS: "In progress",
@@ -51,6 +52,9 @@ export const taskInput = z.object({
   estimatedHours: hours,
   dueDate: optionalDate,
   plannedDate: optionalDate,
+  plannedPeriod: z
+    .union([z.literal(""), z.enum(PLANNED_PERIODS)])
+    .transform((value) => value || null),
   completionCriteria: z.string().trim().max(10000).default(""),
   sopUrl: z
     .union([
@@ -66,6 +70,14 @@ export const taskInput = z.object({
     .transform((value) => value || null),
   isMilestone: z.boolean().default(false),
   dependencyIds: z.array(z.string().min(1)).max(200).default([]),
+}).superRefine((value, context) => {
+  if (value.plannedPeriod && !value.plannedDate) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["plannedPeriod"],
+      message: "Choose a planned date before assigning AM or PM.",
+    });
+  }
 });
 
 // Fields editable inline from the compact task table.
@@ -156,6 +168,7 @@ export function assertAcyclic(
 export type ScheduledWork = {
   assigneeId: string | null;
   plannedDate: string | null;
+  plannedPeriod?: string | null;
   estimatedHours: number | null;
   status: string;
 };

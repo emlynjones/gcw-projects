@@ -215,6 +215,8 @@ model Task {
   // Date-only YYYY-MM-DD avoids timezone shifts in scheduling.
   dueDate String?
   plannedDate String?
+  // Coarse weekly sequencing; null preserves dated work not yet put into AM/PM.
+  plannedPeriod String?
   completionCriteria String @default("")
   sopUrl String?
   isMilestone Boolean @default(false)

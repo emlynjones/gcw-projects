@@ -2,7 +2,12 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { saveTaskAction } from "./actions";
-import { PRIORITIES, STATUSES, STATUS_LABELS } from "@/modules/work/domain";
+import {
+  PLANNED_PERIODS,
+  PRIORITIES,
+  STATUSES,
+  STATUS_LABELS,
+} from "@/modules/work/domain";
 import type { WorkData } from "@/modules/work/application";
 
 type Task = WorkData["tasks"][number];
@@ -174,6 +179,20 @@ export default function TaskEditor({
               name="plannedDate"
               defaultValue={task?.plannedDate ?? ""}
             />
+          </label>
+          <label>
+            Planned period
+            <select
+              name="plannedPeriod"
+              defaultValue={task?.plannedPeriod ?? ""}
+            >
+              <option value="">Unallocated</option>
+              {PLANNED_PERIODS.map((period) => (
+                <option key={period} value={period}>
+                  {period}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
         <label>

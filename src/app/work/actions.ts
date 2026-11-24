@@ -113,6 +113,7 @@ export async function createTaskRowAction(
       priority: "NORMAL",
       estimatedHours: "",
       plannedDate: "",
+      plannedPeriod: "",
       sopUrl: "",
     });
     refresh(result.projectId);

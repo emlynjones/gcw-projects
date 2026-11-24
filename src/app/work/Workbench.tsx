@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import {
   addDays,
   monday,
+  PLANNED_PERIODS,
   PRIORITIES,
   STATUSES,
   STATUS_LABELS,
@@ -185,7 +186,8 @@ export default function Workbench({
           : `${task.estimatedHours}h`}
       </p>
       <p className="small">
-        Planned: {task.plannedDate ?? "Not scheduled"} · Due:{" "}
+        Planned: {task.plannedDate ?? "Not scheduled"}
+        {task.plannedDate && ` ${task.plannedPeriod ?? "· period needed"}`} · Due:{" "}
         <span
           className={
             task.dueDate && task.dueDate < today && task.status !== "DONE"
@@ -454,7 +456,7 @@ export default function Workbench({
                     {Array.from({ length: 7 }, (_, index) =>
                       addDays(week, index),
                     ).map((day) => (
-                      <div key={day}>
+                      <div key={day} className="work-day">
                         <h3>
                           {new Date(`${day}T12:00:00Z`).toLocaleDateString(
                             "en-GB",
@@ -465,13 +467,34 @@ export default function Workbench({
                             },
                           )}
                         </h3>
-                        {tasks
-                          .filter(
-                            (task) =>
-                              task.assigneeId === user.id &&
-                              task.plannedDate === day,
-                          )
-                          .map(card)}
+                        {[...PLANNED_PERIODS, "UNALLOCATED" as const].map(
+                          (period) => {
+                            const periodTasks = tasks.filter(
+                              (task) =>
+                                task.assigneeId === user.id &&
+                                task.plannedDate === day &&
+                                (period === "UNALLOCATED"
+                                  ? !task.plannedPeriod
+                                  : task.plannedPeriod === period),
+                            );
+                            if (period === "UNALLOCATED" && !periodTasks.length)
+                              return null;
+                            return (
+                              <section className="work-period" key={period}>
+                                <h4>
+                                  {period === "UNALLOCATED"
+                                    ? "Period needed"
+                                    : period}
+                                </h4>
+                                {periodTasks.length ? (
+                                  periodTasks.map(card)
+                                ) : (
+                                  <p className="muted small">Available</p>
+                                )}
+                              </section>
+                            );
+                          },
+                        )}
                       </div>
                     ))}
                   </div>

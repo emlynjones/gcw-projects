@@ -944,9 +944,17 @@ code {
 .report-adhoc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .report-adhoc { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; break-inside: avoid; }
 .report-adhoc .report-subhead { margin-top: 8px; }
+.report-live-list > div { padding: 4px 0; border-bottom: 1px dashed var(--border); }
+.report-live-list > div:last-child { border-bottom: 0; }
+.quote-row { display: grid; grid-template-columns: minmax(240px, 1fr) 90px auto; align-items: center; gap: 8px; margin-bottom: 8px; }
+.quote-task-row label { display: flex; align-items: center; gap: 4px; }
+.quote-task-row label input { width: 72px; }
+.quote-total { display: flex; justify-content: space-between; align-items: baseline; padding: 12px; background: #f3f6f8; border-radius: 6px; }
+.quote-copy { white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.45; background: #f7f8f9; border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
 @media (max-width: 900px) {
   .weekly-plan-days { grid-template-columns: 1fr; }
   .report-action-grid, .report-adhoc-grid { grid-template-columns: 1fr; }
+  .quote-row { grid-template-columns: 1fr; }
 }
 
 @media print {

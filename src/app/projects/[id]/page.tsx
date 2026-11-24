@@ -67,6 +67,7 @@ import { ADHOC_ITEM_CODES, ADHOC_ITEM_CODE_DEFAULT, feeRemainder } from "@/lib/i
 import InvoiceBuilder from "./InvoiceBuilder";
 import InvoiceCta, { invoiceDue } from "./InvoiceCta";
 import FinalInvoicePanel from "./FinalInvoicePanel";
+import AdhocQuoteBuilder from "./AdhocQuoteBuilder";
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +93,7 @@ export default async function ProjectPage({
       devSites: { orderBy: { createdAt: "asc" } },
       files: { orderBy: { createdAt: "asc" } },
       services: { orderBy: { sortOrder: "asc" } },
+      tasks: { orderBy: { createdAt: "asc" }, select: { title: true, estimatedHours: true, status: true } },
     },
   });
   if (!project) notFound();
@@ -101,7 +103,7 @@ export default async function ProjectPage({
   const priceList = await prisma.service.findMany({
     where: { active: true },
     orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
-    select: { id: true, name: true, price: true, unit: true, category: true, xeroItemCode: true },
+    select: { id: true, name: true, description: true, price: true, unit: true, category: true, xeroItemCode: true },
   });
   // Cached locally — this page costs no Xero calls to render the picker.
   // The client's sites, so a hosting or domain line can name one.
@@ -219,6 +221,16 @@ export default async function ProjectPage({
       )}
 
       <InvoiceCta project={project} xeroConnected={!!xeroConn} />
+
+      {isAdhoc && <AdhocQuoteBuilder
+        projectId={project.id}
+        jobTitle={project.title}
+        clientName={project.client.contactName || project.client.name}
+        catalogue={priceList}
+        savedLines={project.services}
+        savedTasks={project.tasks.filter((task) => task.status !== "DONE").flatMap((task) => task.estimatedHours === null ? [] : [{ title: task.title, estimatedHours: task.estimatedHours }])}
+        aiConfigured={ai.configured}
+      />}
 
       <ProjectTasks projectId={project.id} />
 

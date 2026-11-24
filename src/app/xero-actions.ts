@@ -117,7 +117,7 @@ export async function raiseAdhocInvoice(projectId: string, formData?: FormData) 
   await requireUser();
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: projectId },
-    include: { client: true },
+    include: { client: true, services: { orderBy: { sortOrder: "asc" } } },
   });
   if (project.totalValue <= 0) throw new Error("Set the project amount before invoicing.");
 
@@ -137,10 +137,13 @@ export async function raiseAdhocInvoice(projectId: string, formData?: FormData) 
     hours,
   });
   const contactId = await ensureXeroContactId(project);
+  // Quote-builder lines are immutable snapshots of the catalogue selection and
+  // become the invoice lines. Older ad-hoc jobs retain the single-line fallback.
+  const quotedLines = serviceLines(project.services);
   const xi = await createDraftInvoice({
     contactId,
     reference: project.title,
-    lines: [
+    lines: quotedLines.length ? quotedLines : [
       {
         description,
         quantity: 1,

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { dateFmt, monthFmt, stageAction, stageLabel, stagesFor, canMarkLost, LOST } from "@/lib/status";
+import { dateFmt, monthFmt, stageAction, stageLabel, stagesFor, canMarkLost, LOST, PROJECT_STAGES } from "@/lib/status";
 import { addDays, monday, PLANNED_PERIODS, todayLondon } from "@/modules/work/domain";
 import { getAiStatus } from "@/lib/settings";
 import { generateNextSteps, generateAllNextSteps } from "@/app/ai-actions";
@@ -15,9 +15,17 @@ export default async function ReportsPage() {
   const week = monday(today);
   const weekEnd = addDays(week, 7);
   const recentSince = new Date(`${addDays(today, -14)}T00:00:00Z`);
+  const yearStart = new Date(`${today.slice(0, 4)}-01-01T00:00:00Z`);
+  const nextYear = new Date(`${Number(today.slice(0, 4)) + 1}-01-01T00:00:00Z`);
   const [projects, people, ai] = await Promise.all([
     prisma.project.findMany({
-      where: { archived: false, stage: { not: LOST } },
+      where: {
+        stage: { not: LOST },
+        OR: [
+          { archived: false },
+          { type: "PROJECT", stage: "LIVE", completedDate: { gte: yearStart, lt: nextYear } },
+        ],
+      },
       include: {
         client: true,
         notes: { orderBy: { timestamp: "desc" }, take: 2 },
@@ -44,6 +52,10 @@ export default async function ReportsPage() {
     ...stagesFor(project.type),
     ...(canMarkLost(project.stage) ? [LOST] : []),
   ].map((value) => ({ value, label: stageLabel(value) }));
+  const activeProjects = projects
+    .filter((project) => project.type === "PROJECT" && project.stage !== "LIVE")
+    .sort((a, b) => PROJECT_STAGES.indexOf(a.stage as (typeof PROJECT_STAGES)[number]) - PROJECT_STAGES.indexOf(b.stage as (typeof PROJECT_STAGES)[number]));
+  const liveThisYear = projects.filter((project) => project.type === "PROJECT" && project.stage === "LIVE" && project.completedDate && project.completedDate >= yearStart && project.completedDate < nextYear);
 
   return <div className="report">
     <div className="page-head no-print">
@@ -78,7 +90,7 @@ export default async function ReportsPage() {
     </section>
 
     <div className="report-section-head"><h2>Projects</h2><span className="muted small">Where we are, what moves next, and what is needed</span></div>
-    {projects.filter((project) => project.type === "PROJECT").map((project) => {
+    {activeProjects.map((project) => {
       const doneIds = new Set(project.tasks.filter((task) => task.status === "DONE").map((task) => task.id));
       const outstanding = project.tasks.filter((task) => task.status !== "DONE");
       const ready = outstanding.filter((task) => task.dependencies.every((edge) => doneIds.has(edge.prerequisiteId))).sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority));
@@ -114,6 +126,14 @@ export default async function ReportsPage() {
         <div className="print-only"><div className="print-jot-label">Decisions / actions to enter</div><div className="print-jot" /></div>
       </article>;
     })}
+
+    {liveThisYear.length > 0 && <section className="card report-live-list">
+      <h2>Gone live in {today.slice(0, 4)}</h2>
+      {liveThisYear.map((project) => <div key={project.id}>
+        <Link href={`/projects/${project.id}`}>{project.title}</Link>
+        <span className="muted small"> · {project.client.name}{project.completedDate ? ` · ${dateFmt(project.completedDate)}` : ""}</span>
+      </div>)}
+    </section>}
 
     <div className="report-section-head"><h2>Ad-hoc work needing a slot</h2></div>
     <div className="report-adhoc-grid">

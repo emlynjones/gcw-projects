@@ -92,6 +92,12 @@
 .admin-bar .topbar-user .btn { border-color: var(--border); color: var(--text); }
 .container.app-content { max-width: 1500px; margin-left: 220px; margin-right: 0; padding: 92px 42px 72px; }
 
+@media (min-width: 821px) {
+  .container.app-content:has(> .dashboard-page) {
+    margin-inline: max(220px, calc((100% - 1500px + 220px) / 2)) auto;
+  }
+}
+
 @media (max-width: 820px) {
   .sidebar { position: static; width: auto; }
   .sidebar-inner { min-height: 0; }

@@ -68,6 +68,7 @@ import InvoiceBuilder from "./InvoiceBuilder";
 import InvoiceCta, { invoiceDue } from "./InvoiceCta";
 import FinalInvoicePanel from "./FinalInvoicePanel";
 import AdhocQuoteBuilder from "./AdhocQuoteBuilder";
+import QuoteChaser from "./QuoteChaser";
 
 export const dynamic = "force-dynamic";
 
@@ -231,6 +232,10 @@ export default async function ProjectPage({
         savedTasks={project.tasks.filter((task) => task.status !== "DONE").flatMap((task) => task.estimatedHours === null ? [] : [{ title: task.title, estimatedHours: task.estimatedHours }])}
         aiConfigured={ai.configured}
       />}
+
+      {isAdhoc && project.stage === "QUOTED" && !project.archived && !project.client.isInternal && (
+        <QuoteChaser projectId={project.id} email={project.client.email} aiConfigured={ai.configured} />
+      )}
 
       <ProjectTasks projectId={project.id} />
 
